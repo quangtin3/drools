@@ -6,12 +6,12 @@
   <parent>
     <groupId>org.drools</groupId>
     <artifactId>drools-multiproject</artifactId>
-    <version>5.5.0.Final.Viettel</version>
+    <version>5.5.0.Final</version>
   </parent>
 
-  <artifactId>drools-templates</artifactId>
+  <artifactId>drools-decisiontables</artifactId>
 
-  <name>Drools :: Templates</name>
+  <name>Drools :: Decision Tables</name>
   
   <dependencies>
     <!-- Internal dependencies -->
@@ -24,8 +24,41 @@
       <artifactId>drools-compiler</artifactId>
     </dependency>
     <dependency>
-      <groupId>org.hsqldb</groupId>
-      <artifactId>hsqldb</artifactId>
+      <groupId>org.drools</groupId>
+      <artifactId>drools-templates</artifactId>
+    </dependency>
+    <!-- External dependencies -->
+    <dependency>
+      <groupId>org.apache.felix</groupId>
+      <artifactId>org.osgi.core</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.felix</groupId>
+      <artifactId>org.osgi.compendium</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <!-- TODO jexcelapi drags in log4j
+        Our users should use log4j-over-slf4j (with for example logback-classic),
+        unless they use log4j with slf4j-log4j -->
+      <groupId>net.sourceforge.jexcelapi</groupId>
+      <artifactId>jxl</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>commons-io</groupId>
+      <artifactId>commons-io</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!-- Logging -->
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-api</artifactId>
+    </dependency>
+    <dependency><!-- For unit test logging: configure in src/test/resources/logback-test.xml -->
+      <groupId>ch.qos.logback</groupId>
+      <artifactId>logback-classic</artifactId>
       <scope>test</scope>
     </dependency>
   </dependencies>
@@ -55,12 +88,13 @@
         <configuration>
           <manifestLocation>META-INF</manifestLocation>
           <instructions>
-            <Bundle-SymbolicName>org.drools.templates;singleton:=true</Bundle-SymbolicName>
+            <Bundle-SymbolicName>org.drools.decisiontables;singleton:=true</Bundle-SymbolicName>
             <_removeheaders>Ignore-Package</_removeheaders>
             <Require-Bundle>org.drools.core;bundle-version="${drools.osgi.version}"</Require-Bundle>
             <Import-Package>!org.drools.*, *</Import-Package>
             <Export-Package>org.drools.*</Export-Package>
             <DynamicImport-Package>org.drools.*</DynamicImport-Package>
+            <Bundle-Activator>org.drools.osgi.decisiontables.Activator</Bundle-Activator>
           </instructions>
         </configuration>
       </plugin>
