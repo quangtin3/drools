@@ -28,7 +28,6 @@ import org.drools.rule.builder.dialect.java.parser.JavaInterfacePointsDescr;
 import org.drools.rule.builder.dialect.java.parser.JavaLocalDeclarationDescr;
 import org.drools.rule.builder.dialect.java.parser.JavaLocalDeclarationDescr.IdentifierDescr;
 import org.drools.rule.builder.dialect.java.parser.JavaModifyBlockDescr;
-import org.drools.rule.builder.dialect.java.parser.JavaStatementBlockDescr;
 import org.drools.rule.builder.dialect.java.parser.JavaThrowBlockDescr;
 import org.drools.rule.builder.dialect.java.parser.JavaTryBlockDescr;
 import org.drools.rule.builder.dialect.java.parser.JavaWhileBlockDescr;
@@ -80,7 +79,9 @@ public final class DialectUtil {
                                             final ResourceReader src) {
         // replaces all non alphanumeric or $ chars with _
         final String newName = prefix + "_" + NON_ALPHA_REGEX.matcher(name).replaceAll("_");
-        if (ext.equals("java")) return newName + "_" + generateUUID();
+        if (ext.equals("java")) {
+            return newName;
+        }
 
         final String fileName = packageName.replace('.', '/') + "/" + newName;
 
@@ -651,7 +652,7 @@ public final class DialectUtil {
 
         addLineBreaks(consequence, originalBlock.substring(end));
 
-        appendUpdateStatement(consequence, declr, obj, modificationMask);
+        appendUpdateStatement(consequence, declr, obj, modificationMask, typeClass);
     }
 
     private static void rewriteUpdateDescr(RuleBuildContext context,
@@ -685,17 +686,20 @@ public final class DialectUtil {
             }
         }
 
-        appendUpdateStatement(consequence, declr, obj, modificationMask);
+        appendUpdateStatement(consequence, declr, obj, modificationMask, typeClass);
     }
 
-    private static void appendUpdateStatement(StringBuilder consequence, Declaration declr, String obj, long modificationMask) {
+    private static void appendUpdateStatement(StringBuilder consequence, Declaration declr, String obj, long modificationMask, Class<?> typeClass) {
         boolean isInternalFact = declr == null || declr.isInternalFact();
         consequence
                 .append("drools.update( ")
                 .append(obj)
                 .append(isInternalFact ? "__Handle2__, " : "__Handle__, ")
                 .append(modificationMask)
-                .append("L ); }");
+                .append("L, ")
+                .append(typeClass != null ? typeClass.getCanonicalName() : "java.lang.Object")
+                .append(".class")
+                .append(" ); }");
     }
 
     private static long parseModifiedProperties(ConsequenceMetaData.Statement statement,
@@ -709,7 +713,7 @@ public final class DialectUtil {
             String methodName = exprStr.substring(0, endMethodName).trim();
             String propertyName = setter2property(methodName);
 
-            String methodParams = exprStr.substring(endMethodName+1, exprStr.indexOf(')')).trim();
+            String methodParams = exprStr.substring(endMethodName+1, exprStr.lastIndexOf(')')).trim();
             List<String> args = splitArgumentsList(methodParams);
             int argsNr = args.size();
 
@@ -777,6 +781,11 @@ public final class DialectUtil {
     }
 
     private static Class<?> findDeclarationClass(RuleBuildContext context, JavaBlockDescr d, String statement) {
+        Class<?> inputClass = d.getInputs() == null ? null : d.getInputs().get(statement);
+        if (inputClass != null) {
+            return inputClass;
+        }
+
         List<JavaLocalDeclarationDescr> localDeclarationDescrs = d.getInScopeLocalVars();
         if (localDeclarationDescrs == null) {
             return null;

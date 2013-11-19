@@ -72,8 +72,27 @@ import org.drools.time.SessionPseudoClock;
 import org.drools.time.impl.DurationTimer;
 import org.drools.time.impl.PseudoClockScheduler;
 import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
+
+import java.io.File;
+import java.io.IOException;
+import java.io.Serializable;
+import java.io.StringReader;
+import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.concurrent.TimeUnit;
+
+import static org.hamcrest.CoreMatchers.is;
+import static org.mockito.Matchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 
 public class CepEspTest extends CommonTestMethodBase {
     
@@ -703,7 +722,8 @@ public class CepEspTest extends CommonTestMethodBase {
         assertTrue( handle7.isEvent() );
         assertTrue( handle8.isEvent() );
 
-        //        wm  = SerializationHelper.serializeObject(wm);
+        // TODO: serialization needs to be fixed
+        //wm = SerializationHelper.getSerialisedStatefulKnowledgeSession( wm, true );
         wm.fireAllRules();
 
         assertEquals( 1,
@@ -868,6 +888,83 @@ public class CepEspTest extends CommonTestMethodBase {
     }
 
     @Test
+    public void testComplexOperator() throws Exception {
+        // read in the source
+        KnowledgeBaseConfiguration conf = KnowledgeBaseFactory.newKnowledgeBaseConfiguration();
+        conf.setOption( EventProcessingOption.STREAM );
+        final KnowledgeBase kbase = loadKnowledgeBase( conf, "test_CEP_ComplexOperator.drl" );
+
+        KnowledgeSessionConfiguration sconf = KnowledgeBaseFactory.newKnowledgeSessionConfiguration();
+        sconf.setOption( ClockTypeOption.get( ClockType.PSEUDO_CLOCK.getId() ) );
+        StatefulKnowledgeSession ksession = createKnowledgeSession( kbase, sconf );
+
+        final PseudoClockScheduler clock = (PseudoClockScheduler) ksession.<SessionClock>getSessionClock();
+        clock.setStartupTime( 1000 );
+
+        AgendaEventListener ael = mock( AgendaEventListener.class );
+        ksession.addEventListener( ael );
+
+        StockTickInterface tick1 = new StockTick( 1,
+                                                  "DROO",
+                                                  50,
+                                                  0,
+                                                  3 );
+        StockTickInterface tick2 = new StockTick( 2,
+                                                  "ACME",
+                                                  10,
+                                                  4,
+                                                  3 );
+        StockTickInterface tick3 = new StockTick( 3,
+                                                  "ACME",
+                                                  10,
+                                                  8,
+                                                  3 );
+        StockTickInterface tick4 = new StockTick( 4,
+                                                  "DROO",
+                                                  50,
+                                                  12,
+                                                  5 );
+        StockTickInterface tick5 = new StockTick( 5,
+                                                  "ACME",
+                                                  10,
+                                                  12,
+                                                  5 );
+        StockTickInterface tick6 = new StockTick( 6,
+                                                  "ACME",
+                                                  10,
+                                                  13,
+                                                  3 );
+        StockTickInterface tick7 = new StockTick( 7,
+                                                  "ACME",
+                                                  10,
+                                                  13,
+                                                  5 );
+        StockTickInterface tick8 = new StockTick( 8,
+                                                  "ACME",
+                                                  10,
+                                                  15,
+                                                  3 );
+
+        ksession.insert( tick1 );
+        ksession.insert( tick2 );
+        ksession.insert( tick3 );
+        ksession.insert( tick4 );
+        ksession.insert( tick5 );
+        ksession.insert( tick6 );
+        ksession.insert( tick7 );
+        ksession.insert( tick8 );
+
+        ArgumentCaptor<ActivationCreatedEvent> arg = ArgumentCaptor.forClass( ActivationCreatedEvent.class );
+        verify( ael ).activationCreated( arg.capture() );
+        assertThat( arg.getValue().getActivation().getRule().getName(),
+                is( "before" ) );
+
+        ksession.fireAllRules();
+
+        verify( ael ).afterActivationFired( any( AfterActivationFiredEvent.class ) );
+    }
+
+    @Test
     public void testMetByOperator() throws Exception {
         // read in the source
         final Reader reader = new InputStreamReader( getClass().getResourceAsStream( "test_CEP_MetByOperator.drl" ) );
@@ -989,8 +1086,9 @@ public class CepEspTest extends CommonTestMethodBase {
                                                   104000, // 4 seconds after DROO
                                                   3 );
 
-        InternalFactHandle handle1 = (InternalFactHandle) wm.insert( tick1 );
         InternalFactHandle handle2 = (InternalFactHandle) wm.insert( tick2 );
+        InternalFactHandle handle1 = (InternalFactHandle) wm.insert( tick1 );
+        
 
         assertNotNull( handle1 );
         assertNotNull( handle2 );
@@ -2525,6 +2623,113 @@ public class CepEspTest extends CommonTestMethodBase {
         Assert.assertThat( aafe.get( 3 ).getActivation().getRule().getName(),
                            is( "R3" ) );
     }
-    
-    
+
+    @Test
+    public void testExpireEventOnEndTimestamp() throws Exception {
+        // DROOLS-40
+        String str =
+                "package org.drools;\n" +
+                "\n" +
+                "import org.drools.StockTick;\n" +
+                "\n" +
+                "global java.util.List resultsAfter;\n" +
+                "\n" +
+                "declare StockTick\n" +
+                "    @role( event )\n" +
+                "    @duration( duration )\n" +
+                "end\n" +
+                "\n" +
+                "rule \"after[60,80]\"\n" +
+                "when\n" +
+                "$a : StockTick( company == \"DROO\" )\n" +
+                "$b : StockTick( company == \"ACME\", this after[60,80] $a )\n" +
+                "then\n" +
+                "       resultsAfter.add( $b );\n" +
+                "end";
+
+        KnowledgeBaseConfiguration config = KnowledgeBaseFactory.newKnowledgeBaseConfiguration();
+        config.setOption(EventProcessingOption.STREAM);
+        KnowledgeBase kbase = loadKnowledgeBaseFromString(config, str);
+
+        KnowledgeSessionConfiguration conf = KnowledgeBaseFactory.newKnowledgeSessionConfiguration();
+        conf.setOption( ClockTypeOption.get( ClockType.PSEUDO_CLOCK.getId() ) );
+        StatefulKnowledgeSession ksession = kbase.newStatefulKnowledgeSession(conf, null);
+
+        PseudoClockScheduler clock = (PseudoClockScheduler) ksession.getSessionClock();
+
+        List<StockTick> resultsAfter = new ArrayList<StockTick>();
+        ksession.setGlobal("resultsAfter", resultsAfter);
+
+        // inserting new StockTick with duration 30 at time 0 => rule
+        // after[60,80] should fire when ACME lasts at 100-120
+        ksession.insert(new StockTick(1, "DROO", 0, 0, 30));
+
+        clock.advanceTime(100, TimeUnit.MILLISECONDS);
+
+        ksession.insert(new StockTick(2, "ACME", 0, 0, 20));
+
+        ksession.fireAllRules();
+
+        assertEquals(1, resultsAfter.size());
+    }
+
+
+    @Test
+    @Ignore
+    public void testSlidingWindowsAccumulateExternalJoin() throws Exception {
+
+        String str =
+                "package testing2;\n" +
+                        "\n" +
+                        "import java.util.*;\n" +
+                        "import org.drools.StockTick;\n" +
+                        "\n" +
+                        "" +
+                        "declare StockTick\n" +
+                        "    @role( event )\n" +
+                        "    @duration( duration )\n" +
+                        "end\n" +
+                        "\n" +
+                        "rule test\n" +
+                        "when\n" +
+                        " $primary : StockTick( $name : company ) over window:length(4)\n" +
+                        " accumulate ( " +
+                        "           $tick : StockTick( company == $name ), " +
+                        "               $list : count( $tick ) )\n" +
+
+                        "then\n" +
+                        "   System.out.println(\"Found name: \" + $primary + \" with \"  );\n" +
+                        "end\n" +
+                        ""
+                        ;
+
+        KnowledgeBaseConfiguration config = KnowledgeBaseFactory.newKnowledgeBaseConfiguration();
+        config.setOption(EventProcessingOption.STREAM);
+        KnowledgeBase kbase = loadKnowledgeBaseFromString(config, str);
+
+        KnowledgeSessionConfiguration conf = KnowledgeBaseFactory.newKnowledgeSessionConfiguration();
+        conf.setOption( ClockTypeOption.get( ClockType.PSEUDO_CLOCK.getId() ) );
+        StatefulKnowledgeSession ksession = kbase.newStatefulKnowledgeSession(conf, null);
+
+        PseudoClockScheduler clock = (PseudoClockScheduler) ksession.getSessionClock();
+
+        int seq = 0;
+
+        clock.advanceTime( 10, TimeUnit.MILLISECONDS );
+        ksession.insert( new StockTick( seq++, "x", 10.0, 10L ) );
+        ksession.insert( new StockTick( seq++, "y", 10.0, 10L ) );
+        ksession.insert( new StockTick( seq++, "z", 10.0, 10L ) );
+
+        ksession.fireAllRules();
+
+        System.out.println(" ___________________________________- ");
+
+        ksession.insert( new StockTick( seq++, "z", 13.0, 20L ) );
+        ksession.insert( new StockTick( seq++, "x", 11.0, 20L ) );
+
+        // NPE Here
+        ksession.fireAllRules();
+
+    }
+
 }

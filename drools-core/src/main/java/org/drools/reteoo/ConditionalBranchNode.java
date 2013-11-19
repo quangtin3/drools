@@ -1,7 +1,7 @@
 package org.drools.reteoo;
 
 import org.drools.RuleBaseConfiguration;
-import org.drools.common.BaseNode;
+import org.drools.base.DroolsQuery;
 import org.drools.common.InternalFactHandle;
 import org.drools.common.InternalWorkingMemory;
 import org.drools.common.LeftTupleIterator;
@@ -9,8 +9,8 @@ import org.drools.common.Memory;
 import org.drools.common.NodeMemory;
 import org.drools.common.PropagationContextImpl;
 import org.drools.common.UpdateContext;
-import org.drools.reteoo.builder.BuildContext;
 import org.drools.reteoo.ConditionalBranchEvaluator.ConditionalExecution;
+import org.drools.reteoo.builder.BuildContext;
 import org.drools.spi.PropagationContext;
 
 import java.io.Externalizable;
@@ -100,10 +100,19 @@ public class ConditionalBranchNode extends LeftTupleSource implements LeftTupleS
         ConditionalExecution conditionalExecution = branchEvaluator.evaluate( leftTuple, workingMemory, memory.context );
 
         if ( conditionalExecution != null ) {
+            boolean useLeftMemory = true;
+            if ( !this.tupleMemoryEnabled ) {
+                // This is a hack, to not add closed DroolsQuery objects
+                Object object = leftTuple.get( 0 ).getObject();
+                if ( !(object instanceof DroolsQuery) || !((DroolsQuery) object).isOpen() ) {
+                    useLeftMemory = false;
+                }
+            }
+
             conditionalExecution.getSink().propagateAssertLeftTuple( leftTuple,
                                                                      context,
                                                                      workingMemory,
-                                                                     this.tupleMemoryEnabled );
+                                                                     useLeftMemory );
             breaking = conditionalExecution.isBreaking();
         }
 
@@ -277,24 +286,19 @@ public class ConditionalBranchNode extends LeftTupleSource implements LeftTupleS
 
     protected void doRemove(final RuleRemovalContext context,
                             final ReteooBuilder builder,
-                            final BaseNode node,
                             final InternalWorkingMemory[] workingMemories) {
-        if ( !node.isInUse() ) {
-            removeTupleSink( (LeftTupleSink) node );
-        }
-
         if ( !this.isInUse() ) {
             for( InternalWorkingMemory workingMemory : workingMemories ) {
                 workingMemory.clearNodeMemory( this );
             }
+            tupleSource.removeTupleSink( this );
         } else {
             throw new RuntimeException("ConditionalBranchNode cannot be shared");
         }
+    }
 
-        this.tupleSource.remove( context,
-                                 builder,
-                                 this,
-                                 workingMemories );
+    protected void doCollectAncestors(NodeSet nodeSet) {
+        this.tupleSource.collectAncestors(nodeSet);
     }
 
     public boolean isLeftTupleMemoryEnabled() {

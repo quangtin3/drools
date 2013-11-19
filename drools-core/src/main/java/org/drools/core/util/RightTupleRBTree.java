@@ -187,6 +187,23 @@ public class RightTupleRBTree<K extends Comparable< ? super K>> {
         return root == null ? FastIterator.EMPTY : new RangeFastIterator( first(), last() );
     }
 
+    @Override
+    public String toString() {
+        FastIterator iterator = fastIterator();
+        StringBuilder sb = new StringBuilder("[");
+        boolean first = true;
+        for (Entry entry = iterator.next(null); entry != null; entry = iterator.next(null)) {
+            if (first) {
+                first = false;
+            } else {
+                sb.append(", ");
+            }
+            sb.append(entry);
+        }
+        sb.append("]");
+        return sb.toString();
+    }
+
     public FastIterator range(K lowerBound,
                               boolean testLowerEqual,
                               K upperBound,
@@ -361,7 +378,7 @@ public class RightTupleRBTree<K extends Comparable< ? super K>> {
         if ( n.left != null && n.right != null ) {
             // Copy key/value from predecessor and then delete it instead
             Node<K> pred = maximumNode( n.left );
-            n.key = pred.key;
+            pred.copyStateInto(n);
             n = pred;
         }
 
@@ -534,6 +551,11 @@ public class RightTupleRBTree<K extends Comparable< ? super K>> {
 
         public int compareTo(Node<K> other) {
             return key.compareTo(other.key);
+        }
+
+        protected void copyStateInto(Node<K> other) {
+            super.copyStateInto(other);
+            other.key = key;
         }
     }
 }

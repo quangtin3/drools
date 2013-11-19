@@ -89,6 +89,20 @@ public class MVELConsequenceBuilder
                             return "drools.shed";
                         }
                     } );
+
+        macros.put( "ward",
+                    new Macro() {
+                        public String doMacro() {
+                            return "drools.ward";
+                        }
+                    } );
+
+        macros.put( "grant",
+                    new Macro() {
+                        public String doMacro() {
+                            return "drools.grant";
+                        }
+                    } );
     }
 
     public MVELConsequenceBuilder() {
@@ -218,6 +232,7 @@ public class MVELConsequenceBuilder
                                 break;
                             } else if( cs[i] == '\n' || cs[i] == '\r' ) {
                                 lastNonWhite = checkAndAddSemiColon( result,
+                                                                     inString,
                                                                      brace,
                                                                      sqre,
                                                                      crly,
@@ -234,6 +249,7 @@ public class MVELConsequenceBuilder
                 case '#' :
                     // line comment
                     lastNonWhite = checkAndAddSemiColon( result,
+                                                         inString,
                                                          brace,
                                                          sqre,
                                                          crly,
@@ -290,11 +306,12 @@ public class MVELConsequenceBuilder
     }
 
     private static char checkAndAddSemiColon(StringBuilder result,
+                                             boolean inString,
                                              int brace,
                                              int sqre,
                                              int crly,
                                              char lastNonWhite) {
-        if ( brace == 0 && sqre == 0 && crly == 0 ){
+        if ( !inString && brace == 0 && sqre == 0 && crly == 0 ){
             if ( lastNonWhite != ';' ) {
                 result.append( ';' );
                 lastNonWhite = ';';

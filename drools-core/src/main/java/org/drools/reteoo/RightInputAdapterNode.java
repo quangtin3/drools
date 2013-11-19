@@ -16,15 +16,8 @@
 
 package org.drools.reteoo;
 
-import java.io.Externalizable;
-import java.io.IOException;
-import java.io.ObjectInput;
-import java.io.ObjectOutput;
-import java.util.List;
-import java.util.Map;
 import org.drools.RuleBaseConfiguration;
 import org.drools.base.DroolsQuery;
-import org.drools.common.BaseNode;
 import org.drools.common.InternalFactHandle;
 import org.drools.common.InternalWorkingMemory;
 import org.drools.common.Memory;
@@ -39,6 +32,13 @@ import org.drools.marshalling.impl.ProtobufInputMarshaller;
 import org.drools.marshalling.impl.ProtobufMessages;
 import org.drools.reteoo.builder.BuildContext;
 import org.drools.spi.PropagationContext;
+
+import java.io.Externalizable;
+import java.io.IOException;
+import java.io.ObjectInput;
+import java.io.ObjectOutput;
+import java.util.List;
+import java.util.Map;
 
 /**
  * When joining a subnetwork into the main network again, RightInputAdapterNode adapts the
@@ -91,7 +91,7 @@ public class RightInputAdapterNode extends ObjectSource
     }
 
     public void writeExternal(ObjectOutput out) throws IOException {
-        super.writeExternal( out );
+        super.writeExternal(out);
         out.writeObject( tupleSource );
         out.writeBoolean( tupleMemoryEnabled );
         out.writeObject( previousTupleSinkNode );
@@ -139,9 +139,9 @@ public class RightInputAdapterNode extends ObjectSource
         }
 
         // propagate it
-        this.sink.propagateAssertObject( handle,
-                                         context,
-                                         workingMemory );
+        this.sink.propagateAssertObject(handle,
+                context,
+                workingMemory);
     }
 
     @SuppressWarnings("unchecked")
@@ -255,20 +255,15 @@ public class RightInputAdapterNode extends ObjectSource
 
         // iterates over all propagated handles and assert them to the new sink
         for ( ObjectEntry entry = (ObjectEntry) it.next(); entry != null; entry = (ObjectEntry) it.next() ) {
-            sink.assertObject( (InternalFactHandle) entry.getValue(),
-                               context,
-                               workingMemory );
+            sink.assertObject((InternalFactHandle) entry.getValue(),
+                    context,
+                    workingMemory);
         }
     }
 
     protected void doRemove(final RuleRemovalContext context,
                             final ReteooBuilder builder,
-                            final BaseNode node,
                             final InternalWorkingMemory[] workingMemories) {
-        if ( !node.isInUse() ) {
-            removeObjectSink( (ObjectSink) node );
-        }
-
         if ( !this.isInUse() ) {
             for ( InternalWorkingMemory workingMemory : workingMemories ) {
                 final RIAMemory memory = (RIAMemory) workingMemory.getNodeMemory( this );
@@ -282,10 +277,13 @@ public class RightInputAdapterNode extends ObjectSource
                 workingMemory.clearNodeMemory( this );
             }
         }
-        this.tupleSource.remove( context,
-                                 builder,
-                                 this,
-                                 workingMemories );
+        if ( !isInUse() ) {
+            tupleSource.removeTupleSink(this);
+        }
+    }
+
+    protected void doCollectAncestors(NodeSet nodeSet) {
+        this.tupleSource.collectAncestors(nodeSet);
     }
 
     public boolean isLeftTupleMemoryEnabled() {
@@ -396,11 +394,11 @@ public class RightInputAdapterNode extends ObjectSource
         return this.tupleSource;
     }
 
-    public int getLeftInputOtnId() {
+    public ObjectTypeNode.Id getLeftInputOtnId() {
         throw new UnsupportedOperationException();
     }
 
-    public void setLeftInputOtnId(int leftInputOtnId) {
+    public void setLeftInputOtnId(ObjectTypeNode.Id leftInputOtnId) {
         throw new UnsupportedOperationException();
     }      
     

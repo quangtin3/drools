@@ -16,11 +16,13 @@
 
 package org.drools.spi;
 
+import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Stack;
 
 import org.drools.base.ClassObjectType;
+import org.drools.base.extractors.MVELNumberClassFieldReader;
 import org.drools.rule.Declaration;
 import org.drools.rule.GroupElement;
 import org.drools.rule.Package;
@@ -109,7 +111,7 @@ public class DeclarationScopeResolver {
                 final Pattern dummy = new Pattern( 0,
                                                    classObjectType );
 
-                GlobalExtractor globalExtractor = new GlobalExtractor( identifier,
+                InternalReadAccessor globalExtractor = getReadAcessor( identifier,
                                                                        classObjectType );
                 declaration = new Declaration( identifier,
                                                globalExtractor,
@@ -120,7 +122,7 @@ public class DeclarationScopeResolver {
                 pkg.getClassFieldAccessorStore().getClassObjectType( classObjectType,
                                                                      dummy );
                 pkg.getClassFieldAccessorStore().getClassObjectType( classObjectType,
-                                                                     globalExtractor );
+                                                                     ( AcceptsClassObjectType ) globalExtractor );
 
                 return declaration;
             } else {
@@ -129,6 +131,28 @@ public class DeclarationScopeResolver {
         }
         return null;
     }
+    
+    public static InternalReadAccessor getReadAcessor(String identifier,
+                                                      ObjectType objectType) {
+        Class returnType = ((ClassObjectType) objectType).getClassType();
+        
+        if (Number.class.isAssignableFrom( returnType ) ||
+                ( returnType == byte.class ||
+                  returnType == short.class ||
+                  returnType == int.class ||
+                  returnType == long.class ||
+                  returnType == float.class ||
+                  returnType == double.class ) ) {            
+            return new GlobalNumberExtractor(identifier,
+                                             objectType);            
+         } else if (  Date.class.isAssignableFrom( returnType) ) {
+          return new GlobalDateExtractor(identifier,
+                                         objectType);
+        } else {
+          return new GlobalExtractor(identifier,
+                                     objectType);
+        }       
+    }    
 
     public boolean available(Rule rule,
                              final String name) {
@@ -196,6 +220,10 @@ public class DeclarationScopeResolver {
     public Map<String, Declaration> getDeclarations(Rule rule, String consequenceName) {
         final Map<String, Declaration> declarations = new HashMap<String, Declaration>();
         for (RuleConditionElement aBuildStack : this.buildStack) {
+            if (aBuildStack instanceof GroupElement && ((GroupElement)aBuildStack).getType() == GroupElement.Type.OR) {
+                continue;
+            }
+
             // this may be optimized in the future to only re-add elements at
             // scope breaks, like "NOT" and "EXISTS"
             Map<String,Declaration> innerDeclarations = aBuildStack instanceof GroupElement ?

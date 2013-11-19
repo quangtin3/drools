@@ -6,6 +6,7 @@ import java.util.Map;
 import org.drools.base.ClassTypeResolver;
 import org.drools.base.TypeResolver;
 import org.drools.core.util.ClassUtils;
+import org.drools.factmodel.traits.TraitRegistry;
 import org.drools.io.Resource;
 import org.drools.lang.descr.ImportDescr;
 import org.drools.rule.DialectRuntimeRegistry;
@@ -15,13 +16,13 @@ import org.drools.rule.Rule;
 import org.drools.spi.Consequence;
 
 public class PackageRegistry {
-    private final Package              pkg;
-    private String                     dialect;
+    private final Package                    pkg;
+    private String                           dialect;
 
     private final DialectRuntimeRegistry     dialectRuntimeRegistry;
     private final DialectCompiletimeRegistry dialectCompiletimeRegistry;
 
-    private final TypeResolver         typeResolver;
+    private final TypeResolver               typeResolver;
 
     public PackageRegistry(PackageBuilder packageBuilder, Package pkg) {
         this.pkg = pkg;
@@ -104,5 +105,9 @@ public class PackageRegistry {
 
     public void removeObjectsGeneratedFromResource(Resource resource) {
         pkg.removeObjectsGeneratedFromResource(resource);
+    }
+
+    public TraitRegistry getTraitRegistry() {
+        return pkg.getTraitRegistry();
     }
 }

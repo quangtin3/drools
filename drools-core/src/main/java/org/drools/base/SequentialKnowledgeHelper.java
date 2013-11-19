@@ -23,6 +23,7 @@ import java.util.Map;
 import org.drools.FactHandle;
 import org.drools.WorkingMemory;
 import org.drools.common.InternalWorkingMemoryActions;
+import org.drools.factmodel.traits.LogicalTypeInconsistencyException;
 import org.drools.factmodel.traits.Thing;
 import org.drools.factmodel.traits.TraitableBean;
 import org.drools.impl.StatefulKnowledgeSessionImpl;
@@ -201,7 +202,23 @@ public class SequentialKnowledgeHelper
         return null;
     }
 
-    public <T, K> Thing<K> shed( TraitableBean<K> core, Class<T> trait) {
+    public <T, K, X extends TraitableBean> Thing<K> shed( TraitableBean<K,X> core, Class<T> trait) {
+        return null;  //To change body of implemented methods use File | Settings | File Templates.
+    }
+
+    public <T, K> Thing<K> ward(Thing<K> core, Class<T> trait) {
+        return null;
+    }
+
+    public <T, K> Thing<K> ward(K core, Class<T> trait) {
+        return null;  //To change body of implemented methods use File | Settings | File Templates.
+    }
+
+    public <T, K> Thing<K> grant(Thing<K> core, Class<T> trait) {
+        return null;
+    }
+
+    public <T, K> Thing<K> grant(K core, Class<T> trait) {
         return null;  //To change body of implemented methods use File | Settings | File Templates.
     }
 
@@ -254,7 +271,7 @@ public class SequentialKnowledgeHelper
         // TODO Auto-generated method stub
     }
 
-    public void update(FactHandle newObject, long mask) {
+    public void update(FactHandle newObject, long mask, Class<?> typeClass) {
         // TODO Auto-generated method stub
     }
 
@@ -266,7 +283,7 @@ public class SequentialKnowledgeHelper
         // TODO Auto-generated method stub
     }
 
-    public void update(Object newObject, long mask) {
+    public void update(Object newObject, long mask, Class<?> typeClass) {
         // TODO Auto-generated method stub
     }
 

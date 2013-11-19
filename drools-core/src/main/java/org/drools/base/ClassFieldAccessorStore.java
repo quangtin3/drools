@@ -16,20 +16,11 @@
 
 package org.drools.base;
 
-import java.io.Externalizable;
-import java.io.IOException;
-import java.io.ObjectInput;
-import java.io.ObjectOutput;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.IdentityHashMap;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.Set;
-
 import org.drools.RuntimeDroolsException;
 import org.drools.base.AccessorKey.AccessorType;
-import org.drools.base.extractors.MVELClassFieldReader;
+import org.drools.base.extractors.MVELDateClassFieldReader;
+import org.drools.base.extractors.MVELNumberClassFieldReader;
+import org.drools.base.extractors.MVELObjectClassFieldReader;
 import org.drools.definition.type.FactField;
 import org.drools.rule.TypeDeclaration;
 import org.drools.spi.Acceptor;
@@ -38,6 +29,18 @@ import org.drools.spi.AcceptsReadAccessor;
 import org.drools.spi.AcceptsWriteAccessor;
 import org.drools.spi.ClassWireable;
 import org.drools.spi.InternalReadAccessor;
+
+import java.io.Externalizable;
+import java.io.IOException;
+import java.io.ObjectInput;
+import java.io.ObjectOutput;
+import java.util.Collections;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.IdentityHashMap;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Set;
 
 public class ClassFieldAccessorStore
     implements
@@ -137,23 +140,40 @@ public class ClassFieldAccessorStore
     }
 
 
-    public MVELClassFieldReader getMVELReader(final String pkgName,
-                                              final String className,
-                                              final String expr,
-                                              final boolean typesafe) {
+    public InternalReadAccessor getMVELReader(final String pkgName,
+                                                    final String className,
+                                                    final String expr,
+                                                    final boolean typesafe, 
+                                                    Class returnType) {
         AccessorKey key = new AccessorKey( pkgName + className,
                                            expr,
                                            AccessorKey.AccessorType.FieldAccessor );
         FieldLookupEntry entry = (FieldLookupEntry) this.lookup.get( key );
         if ( entry == null ) {
-            MVELClassFieldReader reader  = new MVELClassFieldReader( className, expr, typesafe );
+            InternalReadAccessor reader  = getReadAcessor( className, expr, typesafe, returnType );
             entry = new FieldLookupEntry( reader );
             this.lookup.put( key,
                              entry );
         }
 
-        return ( MVELClassFieldReader ) entry.getClassFieldReader();
+        return entry.getClassFieldReader();
     }
+    
+    public static InternalReadAccessor getReadAcessor(String className, String expr, boolean typesafe, Class returnType) {
+        if (Number.class.isAssignableFrom( returnType ) ||
+            ( returnType == byte.class ||
+              returnType == short.class ||
+              returnType == int.class ||
+              returnType == long.class ||
+              returnType == float.class ||
+              returnType == double.class ) ) {            
+            return new MVELNumberClassFieldReader( className, expr, typesafe );            
+        } else if (  Date.class.isAssignableFrom( returnType ) ) {
+          return new MVELDateClassFieldReader( className, expr, typesafe );
+        } else {
+          return new MVELObjectClassFieldReader( className, expr, typesafe );
+        }       
+    }     
 
     public synchronized ClassFieldWriter getWriter(final String className,
                                                    final String fieldName,
@@ -436,31 +456,10 @@ public class ClassFieldAccessorStore
     }
 
     public void wire(ClassFieldWriter writer) {
-        writer.setWriteAccessor( cache.getWriteAcessor( writer ) );
+        if (writer != null) {
+            writer.setWriteAccessor( cache.getWriteAcessor( writer ) );
+        }
     }
-
-    //    public void wire(PatternExtractor reader) {
-    //        ObjectType objectType = reader.getObjectType();
-    //
-    //        if ( objectType instanceof ClassObjectType ) {
-    //            ClassObjectType cot = (ClassObjectType) objectType;
-    //            try {
-    //                Class cls = this.cache.getClassLoader().loadClass( cot.getClassName() );
-    //                cot.setClassType( cls );
-    //            } catch ( ClassNotFoundException e ) {
-    //                throw new RuntimeDroolsException( "Unable to load ClassObjectType class '" + cot.getClassName() + "'" );
-    //            }
-    //        }
-    //    }
-
-//    public void wire(ClassObjectType objectType) {
-//        try {
-//            Class cls = this.cache.getClassLoader().loadClass( objectType.getClassName() );
-//            objectType.setClassType( cls );
-//        } catch ( ClassNotFoundException e ) {
-//            throw new RuntimeDroolsException( "Unable to load ClassObjectType class '" + objectType.getClassName() + "'" );
-//        }
-//    }
 
     public void wire( ClassWireable wireable ) {
         try {

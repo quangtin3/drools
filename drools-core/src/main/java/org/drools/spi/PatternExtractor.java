@@ -16,24 +16,20 @@
 
 package org.drools.spi;
 
+import org.drools.RuntimeDroolsException;
+import org.drools.base.ClassObjectType;
+import org.drools.base.extractors.BaseObjectClassFieldReader;
+import org.drools.common.InternalWorkingMemory;
+import org.drools.core.util.ClassUtils;
+import org.drools.facttemplates.Fact;
+
 import java.io.Externalizable;
 import java.io.IOException;
 import java.io.ObjectInput;
 import java.io.ObjectOutput;
 import java.lang.reflect.Method;
-import java.math.BigDecimal;
-import java.math.BigInteger;
 
-import org.drools.RuntimeDroolsException;
-import org.drools.base.ClassObjectType;
-import org.drools.base.ValueType;
-import org.drools.common.EventFactHandle;
-import org.drools.common.InternalWorkingMemory;
-import org.drools.core.util.ClassUtils;
-import org.drools.core.util.MathUtils;
-import org.drools.facttemplates.Fact;
-
-public class PatternExtractor
+public class PatternExtractor extends BaseObjectClassFieldReader
     implements
     InternalReadAccessor,
     AcceptsClassObjectType,
@@ -43,11 +39,15 @@ public class PatternExtractor
     private ObjectType        objectType;
 
     public PatternExtractor() {
-        this( null );
     }
 
     public PatternExtractor(final ObjectType objectType) {
         this.objectType = objectType;
+        if (objectType instanceof ClassObjectType) {
+            setClassObjectType((ClassObjectType) objectType);
+        } else {
+            this.objectType = objectType;
+        }
     }
 
     public void readExternal(ObjectInput in) throws IOException,
@@ -61,6 +61,9 @@ public class PatternExtractor
     
     public void setClassObjectType(ClassObjectType objectType) {
         this.objectType = objectType;
+        setIndex( -1 );
+        setFieldType( objectType.getClassType() );
+        setValueType( objectType.getValueType() );        
     }
 
     public Object getValue(InternalWorkingMemory workingMemory,
@@ -92,77 +95,6 @@ public class PatternExtractor
         return ClassUtils.canonicalName( clazz );
     }
 
-    public ValueType getValueType() {
-        return this.objectType.getValueType();
-    }
-
-    public boolean getBooleanValue(InternalWorkingMemory workingMemory,
-                                   final Object object) {
-        if ( this.objectType.getValueType().isBoolean() ) {
-            return ((Boolean) object).booleanValue();
-        }
-        throw new RuntimeDroolsException( "Conversion to boolean not supported for type: " + object.getClass() );
-    }
-
-    public byte getByteValue(InternalWorkingMemory workingMemory,
-                             final Object object) {
-        if ( this.objectType.getValueType().isNumber() ) {
-            return ((Number) object).byteValue();
-        }
-        throw new RuntimeDroolsException( "Conversion to byte not supported for type: " + object.getClass() );
-    }
-
-    public char getCharValue(InternalWorkingMemory workingMemory,
-                             final Object object) {
-        if ( this.objectType.getValueType().isChar() ) {
-            return ((Character) object).charValue();
-        }
-        throw new RuntimeDroolsException( "Conversion to char not supported for type: " + object.getClass() );
-    }
-
-    public double getDoubleValue(InternalWorkingMemory workingMemory,
-                                 final Object object) {
-        if ( this.objectType.getValueType().isNumber() ) {
-            return ((Number) object).doubleValue();
-        }
-        throw new RuntimeDroolsException( "Conversion to double not supported for type: " + object.getClass() );
-    }
-
-    public float getFloatValue(InternalWorkingMemory workingMemory,
-                               final Object object) {
-        if ( this.objectType.getValueType().isNumber() ) {
-            return ((Number) object).floatValue();
-        }
-        throw new RuntimeDroolsException( "Conversion to float not supported for type: " + object.getClass() );
-    }
-
-    public int getIntValue(InternalWorkingMemory workingMemory,
-                           final Object object) {
-        if ( this.objectType.getValueType().isNumber() ) {
-            return ((Number) object).intValue();
-        }
-        throw new RuntimeDroolsException( "Conversion to int not supported for type: " + object.getClass() );
-    }
-
-    public long getLongValue(InternalWorkingMemory workingMemory,
-                             final Object object) {
-        if ( this.objectType.getValueType().isNumber() ) {
-            return ((Number) object).longValue();
-        } else if( object instanceof EventFactHandle ) {
-            // special case for handling event timestamps
-            return ((EventFactHandle)object).getStartTimestamp();
-        }
-        throw new RuntimeDroolsException( "Conversion to long not supported for type: " + object.getClass() );
-    }
-
-    public short getShortValue(InternalWorkingMemory workingMemory,
-                               final Object object) {
-        if ( this.objectType.getValueType().isNumber() ) {
-            return ((Number) object).shortValue();
-        }
-        throw new RuntimeDroolsException( "Conversion to short not supported for type: " + object.getClass() );
-    }
-
     public Method getNativeReadMethod() {
         try {
             return this.getClass().getDeclaredMethod( "getValue",
@@ -175,18 +107,6 @@ public class PatternExtractor
 
     public String getNativeReadMethodName() {
         return "getValue";
-    }
-
-    public boolean isNullValue(InternalWorkingMemory workingMemory,
-                               final Object object) {
-        return getValue( workingMemory,
-                         object ) == null;
-    }
-
-    public int getHashCode(InternalWorkingMemory workingMemory,
-                           final Object object) {
-        return getValue( workingMemory,
-                         object ).hashCode();
     }
 
     public int hashCode() {
@@ -209,87 +129,7 @@ public class PatternExtractor
     }
 
     public boolean isSelfReference() {
-        return false;
+        return true;
     }
 
-    public boolean getBooleanValue(Object object) {
-        return getBooleanValue( null,
-                                object );
-    }
-
-    public byte getByteValue(Object object) {
-        return getByteValue( null,
-                             object );
-    }
-
-    public char getCharValue(Object object) {
-        return getCharValue( null,
-                             object );
-    }
-
-    public double getDoubleValue(Object object) {
-        return getDoubleValue( null,
-                               object );
-    }
-
-    public float getFloatValue(Object object) {
-        return getFloatValue( null,
-                              object );
-    }
-
-    public int getHashCode(Object object) {
-        return getHashCode( null,
-                            object );
-    }
-
-    public int getIndex() {
-        return -1;
-    }
-
-    public int getIntValue(Object object) {
-        return getIntValue( null,
-                            object );
-    }
-
-    public long getLongValue(Object object) {
-        return getLongValue( null,
-                             object );
-    }
-
-    public short getShortValue(Object object) {
-        return getShortValue( null,
-                              object );
-    }
-
-    public Object getValue(Object object) {
-        return getValue( null,
-                         object );
-    }
-    
-    public BigDecimal getBigDecimalValue(Object object) {
-        return getBigDecimalValue( null,
-                                   object );
-    }
-
-    public BigInteger getBigIntegerValue(Object object) {
-        return getBigIntegerValue( null,
-                                   object );
-    }
-
-    public BigDecimal getBigDecimalValue(InternalWorkingMemory workingMemory,
-                                         Object object) {
-        return MathUtils.getBigDecimal( getValue( workingMemory,
-                                                  object ) );
-    }
-
-    public BigInteger getBigIntegerValue(InternalWorkingMemory workingMemory,
-                                         Object object) {
-        return MathUtils.getBigInteger( getValue( workingMemory,
-                                                  object ) );
-    }
-
-    public boolean isNullValue(Object object) {
-        return isNullValue( null,
-                            object );
-    }
 }

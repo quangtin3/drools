@@ -16,13 +16,7 @@
 
 package org.drools.reteoo;
 
-import java.io.IOException;
-import java.io.ObjectInput;
-import java.io.ObjectOutput;
-import java.util.Map;
-
 import org.drools.base.DroolsQuery;
-import org.drools.common.BaseNode;
 import org.drools.common.InternalFactHandle;
 import org.drools.common.InternalWorkingMemory;
 import org.drools.common.PropagationContextImpl;
@@ -33,6 +27,11 @@ import org.drools.rule.GroupElement;
 import org.drools.rule.Query;
 import org.drools.rule.Rule;
 import org.drools.spi.PropagationContext;
+
+import java.io.IOException;
+import java.io.ObjectInput;
+import java.io.ObjectOutput;
+import java.util.Map;
 
 /**
  * Leaf Rete-OO node responsible for enacting <code>Action</code> s on a
@@ -59,7 +58,7 @@ public class QueryTerminalNode extends AbstractTerminalNode implements LeftTuple
     private LeftTupleSinkNode previousTupleSinkNode;
     private LeftTupleSinkNode nextTupleSinkNode;
     
-    private int              leftInputOtnId;
+    private transient ObjectTypeNode.Id leftInputOtnId;
 
     // ------------------------------------------------------------
     // Constructors
@@ -103,7 +102,6 @@ public class QueryTerminalNode extends AbstractTerminalNode implements LeftTuple
         query = (Query) in.readObject();
         subrule = (GroupElement) in.readObject();
         subruleIndex = in.readInt();        
-        leftInputOtnId = in.readInt();
     }
 
     public void writeExternal(ObjectOutput out) throws IOException {
@@ -111,7 +109,6 @@ public class QueryTerminalNode extends AbstractTerminalNode implements LeftTuple
         out.writeObject( query );
         out.writeObject( subrule );
         out.writeInt(subruleIndex);
-        out.writeLong(leftInputOtnId);
     }
     
     public Rule getRule() {
@@ -215,12 +212,12 @@ public class QueryTerminalNode extends AbstractTerminalNode implements LeftTuple
 
     protected void doRemove(final RuleRemovalContext context,
                             final ReteooBuilder builder,
-                            final BaseNode node,
                             final InternalWorkingMemory[] workingMemories) {
-        getLeftTupleSource().remove( context,
-                                     builder,
-                                     this,
-                                     workingMemories );
+        getLeftTupleSource().removeTupleSink(this);
+    }
+
+    protected void doCollectAncestors(NodeSet nodeSet) {
+        getLeftTupleSource().collectAncestors(nodeSet);
     }
 
     public boolean isInUse() {
@@ -331,11 +328,11 @@ public class QueryTerminalNode extends AbstractTerminalNode implements LeftTuple
     }    
     
     
-    public int getLeftInputOtnId() {
+    public ObjectTypeNode.Id getLeftInputOtnId() {
         return leftInputOtnId;
     }
 
-    public void setLeftInputOtnId(int leftInputOtnId) {
+    public void setLeftInputOtnId(ObjectTypeNode.Id leftInputOtnId) {
         this.leftInputOtnId = leftInputOtnId;
     }
 }

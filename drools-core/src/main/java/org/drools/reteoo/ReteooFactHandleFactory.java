@@ -24,6 +24,11 @@ import org.drools.common.DefaultFactHandle;
 import org.drools.common.EventFactHandle;
 import org.drools.common.InternalFactHandle;
 import org.drools.common.InternalWorkingMemory;
+import org.drools.common.TraitFactHandle;
+import org.drools.factmodel.traits.Thing;
+import org.drools.factmodel.traits.TraitProxy;
+import org.drools.factmodel.traits.Traitable;
+import org.drools.factmodel.traits.TraitableBean;
 import org.drools.rule.TypeDeclaration;
 import org.drools.runtime.rule.WorkingMemoryEntryPoint;
 import org.drools.spi.FactHandleFactory;
@@ -55,13 +60,8 @@ public class ReteooFactHandleFactory extends AbstractFactHandleFactory implement
             TypeDeclaration type = conf.getTypeDeclaration();
             long timestamp;
             if ( type.getTimestampExtractor() != null ) {
-                if ( Date.class.isAssignableFrom( type.getTimestampExtractor().getExtractToClass() ) ) {
-                    timestamp = ((Date) type.getTimestampExtractor().getValue( workingMemory,
-                                                                               object )).getTime();
-                } else {
-                    timestamp = type.getTimestampExtractor().getLongValue( workingMemory,
-                                                                           object );
-                }
+                timestamp = type.getTimestampExtractor().getLongValue( workingMemory,
+                                                                       object );
             } else {
                 timestamp = workingMemory.getTimerService().getCurrentTime();
             }
@@ -76,6 +76,13 @@ public class ReteooFactHandleFactory extends AbstractFactHandleFactory implement
                                         timestamp,
                                         duration,
                                         wmEntryPoint );
+        } else if ( conf != null && conf.isTrait() ) {
+            return new TraitFactHandle( id,
+                                        object,
+                                        recency,
+                                        wmEntryPoint,
+                                        ( conf.getTypeDeclaration() != null && conf.getTypeDeclaration().getKind() ==  TypeDeclaration.Kind.TRAIT )
+                                        || object instanceof TraitProxy );
         } else {
             return new DefaultFactHandle( id,
                                           object,

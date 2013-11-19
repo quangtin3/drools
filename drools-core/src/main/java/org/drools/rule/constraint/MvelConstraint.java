@@ -1,5 +1,6 @@
 package org.drools.rule.constraint;
 
+import org.drools.base.ClassFieldReader;
 import org.drools.base.DroolsQuery;
 import org.drools.base.extractors.ArrayElementReader;
 import org.drools.base.mvel.MVELCompilationUnit;
@@ -35,6 +36,8 @@ import org.drools.util.CompositeClassLoader;
 import org.mvel2.ParserConfiguration;
 import org.mvel2.compiler.CompiledExpression;
 import org.mvel2.compiler.ExecutableStatement;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.ObjectInput;
@@ -51,6 +54,8 @@ import static org.drools.core.util.StringUtils.skipBlanks;
 public class MvelConstraint extends MutableTypeConstraint implements IndexableConstraint, AcceptsReadAccessor {
     protected static final boolean TEST_JITTING = false;
     protected static final int JIT_THRESOLD = 20; // Integer.MAX_VALUE;
+
+    private static final Logger logger = LoggerFactory.getLogger(MvelConstraint.class);
 
     protected final transient AtomicInteger invocationCounter = new AtomicInteger(1);
     protected transient boolean jitted = false;
@@ -117,6 +122,10 @@ public class MvelConstraint extends MutableTypeConstraint implements IndexableCo
         this.isUnification = isUnification;
     }
 
+    protected String getAccessedClass() {
+        return extractor instanceof ClassFieldReader ? ((ClassFieldReader)extractor).getClassName() : null;
+    }
+
     public void setReadAccessor(InternalReadAccessor readAccessor) {
         this.extractor = readAccessor;
     }
@@ -127,6 +136,10 @@ public class MvelConstraint extends MutableTypeConstraint implements IndexableCo
 
     public String getExpression() {
         return expression;
+    }
+
+    public boolean isDynamic() {
+        return isDynamic;
     }
 
     public boolean isUnification() {
@@ -207,9 +220,9 @@ public class MvelConstraint extends MutableTypeConstraint implements IndexableCo
             ParserConfiguration configuration = statement instanceof CompiledExpression ?
                     ((CompiledExpression)statement).getParserConfiguration() :
                     data.getParserConfiguration();
-            conditionEvaluator = new MvelConditionEvaluator(compilationUnit, configuration, statement, declarations);
+            conditionEvaluator = new MvelConditionEvaluator(compilationUnit, configuration, statement, declarations, getAccessedClass());
         } else {
-            conditionEvaluator = new MvelConditionEvaluator(getParserConfiguration(workingMemory), expression, declarations);
+            conditionEvaluator = new MvelConditionEvaluator(getParserConfiguration(workingMemory), expression, declarations, getAccessedClass());
         }
     }
 
@@ -265,14 +278,22 @@ public class MvelConstraint extends MutableTypeConstraint implements IndexableCo
             return;
         }
 
-        CompositeClassLoader classLoader = ruleBase.getRootClassLoader();
-        if (analyzedCondition == null) {
-            analyzedCondition = ((MvelConditionEvaluator) conditionEvaluator).getAnalyzedCondition(object, workingMemory, leftTuple);
-        }
         try {
+            CompositeClassLoader classLoader = ruleBase.getRootClassLoader();
+            if (analyzedCondition == null) {
+                analyzedCondition = ((MvelConditionEvaluator) conditionEvaluator).getAnalyzedCondition(object, workingMemory, leftTuple);
+            }
             conditionEvaluator = ASMConditionEvaluatorJitter.jitEvaluator(expression, analyzedCondition, declarations, classLoader, leftTuple);
         } catch (Throwable t) {
-            throw new RuntimeException("Exception jitting: " + expression, t);
+            if (TEST_JITTING) {
+                if (analyzedCondition == null) {
+                    logger.error("Unable to analize condition for expression: " + expression, t);
+                } else {
+                    throw new RuntimeException("Exception jitting: " + expression, t);
+                }
+            } else {
+                logger.warn("Exception jitting: " + expression, t);
+            }
         }
     }
 
@@ -322,13 +343,9 @@ public class MvelConstraint extends MutableTypeConstraint implements IndexableCo
     // Slot specific
 
     public long getListenedPropertyMask(List<String> settableProperties) {
-        if (conditionEvaluator == null) {
-            return calculateMaskFromExpression(settableProperties);
-        }
-        if (analyzedCondition == null) {
-            analyzedCondition = ((MvelConditionEvaluator) conditionEvaluator).getAnalyzedCondition();
-        }
-        return calculateMask(analyzedCondition, settableProperties);
+        return analyzedCondition != null ?
+                calculateMask(analyzedCondition, settableProperties) :
+                calculateMaskFromExpression(settableProperties);
     }
 
     private long calculateMaskFromExpression(List<String> settableProperties) {
@@ -406,12 +423,16 @@ public class MvelConstraint extends MutableTypeConstraint implements IndexableCo
 
         if (invocation instanceof MethodInvocation) {
             Method method = ((MethodInvocation)invocation).getMethod();
-            if (method == null && invocations.size() > 1) {
-                invocation = invocations.get(1);
-                if (invocation instanceof MethodInvocation) {
-                    method = ((MethodInvocation)invocation).getMethod();
-                } else if (invocation instanceof FieldAccessInvocation) {
-                    return ((FieldAccessInvocation)invocation).getField().getName();
+            if (method == null) {
+                if (invocations.size() > 1) {
+                    invocation = invocations.get(1);
+                    if (invocation instanceof MethodInvocation) {
+                        method = ((MethodInvocation)invocation).getMethod();
+                    } else if (invocation instanceof FieldAccessInvocation) {
+                        return ((FieldAccessInvocation)invocation).getField().getName();
+                    }
+                } else {
+                    return null;
                 }
             }
             return getter2property(method.getName());

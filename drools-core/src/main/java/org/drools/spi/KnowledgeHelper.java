@@ -22,6 +22,7 @@ import java.util.Map;
 
 import org.drools.FactHandle;
 import org.drools.WorkingMemory;
+import org.drools.factmodel.traits.LogicalTypeInconsistencyException;
 import org.drools.factmodel.traits.Thing;
 import org.drools.factmodel.traits.TraitableBean;
 import org.drools.rule.Declaration;
@@ -91,10 +92,10 @@ public interface KnowledgeHelper
     void update(FactHandle handle, Object newObject);
 
     void update(FactHandle newObject);
-    void update(FactHandle newObject, long mask);
+    void update(FactHandle newObject, long mask, Class<?> modifiedClass);
     
     void update(Object newObject);
-    void update(Object newObject, long mask);
+    void update(Object newObject, long mask, Class<?> modifiedClass);
 
     void modify( Object newObject ) ;
 
@@ -155,7 +156,8 @@ public interface KnowledgeHelper
 
     <T, K> T don( Thing<K> core, Class<T> trait );
 
-    <T,K> Thing<K> shed( Thing<K> thing, Class<T> trait );
+    <T, K> Thing<K> shed( Thing<K> thing, Class<T> trait );
 
-    <T,K> Thing<K> shed( TraitableBean<K> core, Class<T> trait );
+    <T, K, X extends TraitableBean> Thing<K> shed( TraitableBean<K,X> core, Class<T> trait );
+
 }

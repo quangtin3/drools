@@ -19,42 +19,88 @@ package org.drools.factmodel.traits;
 import org.drools.definition.type.FactField;
 import org.drools.factmodel.ClassDefinition;
 import org.drools.factmodel.FieldDefinition;
+import org.drools.rule.TypeDeclaration;
+import org.drools.util.HierarchyEncoder;
+import org.drools.util.HierarchyEncoderImpl;
 
-import java.io.Serializable;
+import java.io.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
-public class TraitRegistry {
+public class TraitRegistry implements Externalizable {
 
-    private static TraitRegistry instance;
-
-    public static TraitRegistry getInstance() {
-        if ( instance == null ) {
-            instance = new TraitRegistry();
-        }
-        return instance;
-    }
-
-    public static void reset() {
-        instance = null;
-    }
 
     private Map<String, ClassDefinition> traits;
     private Map<String, ClassDefinition> traitables;
 
+    private int codeSize = 0;
+
     private Map<String, Long> masks;
 
+    private HierarchyEncoder<String> hierarchy = new HierarchyEncoderImpl<String>();
 
-    private TraitRegistry() {
+
+    public TraitRegistry() {
+
+        TypeDeclaration thingType = new TypeDeclaration( Thing.class.getName() );
+        thingType.setKind( TypeDeclaration.Kind.TRAIT );
+        thingType.setTypeClass( Thing.class );
+        ClassDefinition def = new ClassDefinition();
+        def.setClassName( thingType.getTypeClass().getName() );
+        def.setDefinedClass( Thing.class );
+        addTrait( def );
+
         ClassDefinition individualDef = new ClassDefinition();
         individualDef.setClassName( Entity.class.getName() );
-        individualDef.setDefinedClass(Entity.class);
+        individualDef.setDefinedClass( Entity.class );
         individualDef.setInterfaces( new String[] { Serializable.class.getName(), TraitableBean.class.getName() } );
         individualDef.setTraitable( true );
         addTraitable( individualDef );
-
     }
 
+    public void merge( TraitRegistry other ) {
+        if ( traits == null ) {
+            traits = new HashMap<String, ClassDefinition>();
+        }
+        if ( other.traits != null ) {
+            this.traits.putAll( other.traits );
+        }
+
+        if ( traitables == null ) {
+            traitables = new HashMap<String, ClassDefinition>();
+        }
+        if ( other.traitables != null ) {
+            this.traitables.putAll( other.traitables );
+        }
+
+        if ( masks == null ) {
+            masks = new HashMap<String, Long>();
+        }
+        if ( other.masks != null ) {
+            this.masks.putAll( other.masks );
+        }
+
+        if ( hierarchy == null || hierarchy.size() <= 1 ) {
+            hierarchy = other.hierarchy;
+        } else {
+            if ( other.traits != null ) {
+                for ( String traitName : other.traits.keySet() ) {
+                    ClassDefinition trait = other.traits.get( traitName );
+                    List<String> parentTraits = new ArrayList<String>( );
+                    for ( String candidateIntf : trait.getInterfaces() ) {
+                        if ( hierarchy.getCode( candidateIntf ) != null ) {
+                            parentTraits.add( candidateIntf );
+                        }
+                    }
+                    hierarchy.encode( trait.getName(), parentTraits );
+                }
+            }
+        }
+    }
 
     public Map<String, ClassDefinition> getTraits() {
         return traits;
@@ -64,7 +110,11 @@ public class TraitRegistry {
         if ( key.endsWith(  TraitFactory.SUFFIX ) ) {
             key = key.replace(  TraitFactory.SUFFIX , "" );
         }
-        return traits != null ? traits.get( key ) : null;
+        ClassDefinition traitDef = traits != null ? traits.get( key ) : null;
+        if ( traitDef == null ) {
+
+        }
+        return traitDef;
     }
 
     public Map<String, ClassDefinition> getTraitables() {
@@ -77,14 +127,27 @@ public class TraitRegistry {
 
 
     public void addTrait( ClassDefinition trait ) {
-        addTrait( trait.getClassName(), trait );
+        addTrait(trait.getClassName(), trait);
+        hierarchy.encode( trait.getName(), Arrays.asList( trait.getInterfaces() ) );
     }
+
 
     public void addTrait( String className, ClassDefinition trait ) {
         if ( traits == null ) {
             traits = new HashMap<String, ClassDefinition>();
         }
         this.traits.put( className, trait );
+        hierarchy.encode( className, getTraitInterfaces( trait ) );
+    }
+
+    private Collection<String> getTraitInterfaces( ClassDefinition trait ) {
+        List<String> intfs = new ArrayList<String>();
+        for ( String s : trait.getInterfaces() ) {
+            if ( traits.containsKey( s ) ) {
+                intfs.add( s );
+            }
+        }
+        return intfs;
     }
 
     public void addTraitable( ClassDefinition traitable ) {
@@ -147,6 +210,24 @@ public class TraitRegistry {
     }
 
 
+    public void writeExternal(ObjectOutput objectOutput) throws IOException {
+        objectOutput.writeObject( traits );
+        objectOutput.writeObject( traitables );
+        objectOutput.writeObject( masks );
+        objectOutput.writeObject( hierarchy );
+        objectOutput.writeInt( codeSize );
+    }
+
+    public void readExternal(ObjectInput objectInput) throws IOException, ClassNotFoundException {
+        traits = (Map<String, ClassDefinition>) objectInput.readObject();
+        traitables = (Map<String, ClassDefinition>) objectInput.readObject();
+        masks = (Map<String, Long>) objectInput.readObject();
+        hierarchy = (HierarchyEncoderImpl) objectInput.readObject();
+        codeSize = objectInput.readInt();
+    }
 
 
+    public HierarchyEncoder getHierarchy() {
+        return hierarchy;
+    }
 }

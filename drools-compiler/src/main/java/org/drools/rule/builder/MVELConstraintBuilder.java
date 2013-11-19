@@ -11,7 +11,11 @@ import org.drools.compiler.AnalysisResult;
 import org.drools.compiler.DescrBuildError;
 import org.drools.compiler.Dialect;
 import org.drools.core.util.index.IndexUtil;
-import org.drools.lang.descr.*;
+import org.drools.lang.descr.BaseDescr;
+import org.drools.lang.descr.LiteralRestrictionDescr;
+import org.drools.lang.descr.OperatorDescr;
+import org.drools.lang.descr.PredicateDescr;
+import org.drools.lang.descr.RelationalExprDescr;
 import org.drools.rule.Declaration;
 import org.drools.rule.Pattern;
 import org.drools.rule.ReturnValueRestriction;
@@ -28,12 +32,15 @@ import org.drools.spi.Restriction;
 import org.mvel2.ConversionHandler;
 import org.mvel2.DataConversion;
 import org.mvel2.util.CompatibilityStrategy;
+import org.mvel2.util.NullType;
 
+import java.lang.reflect.Modifier;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
+import static org.drools.core.util.ClassUtils.convertFromPrimitiveType;
 import static org.drools.rule.builder.PatternBuilder.buildAnalysis;
 import static org.drools.rule.builder.PatternBuilder.getUsedDeclarations;
 import static org.drools.rule.builder.dialect.DialectUtil.copyErrorLocation;
@@ -339,7 +346,29 @@ public class MVELConstraintBuilder implements ConstraintBuilder {
 
         @Override
         public boolean areEqualityCompatible(Class<?> c1, Class<?> c2) {
-            return true;
+            if (c1 == NullType.class || c2 == NullType.class) {
+                return true;
+            }
+            if (c1 == String.class || c2 == String.class) {
+                return true;
+            }
+            Class boxed1 = convertFromPrimitiveType(c1);
+            Class boxed2 = convertFromPrimitiveType(c2);
+            if (boxed1.isAssignableFrom(boxed2) || boxed2.isAssignableFrom(boxed1)) {
+                return true;
+            }
+            if (Number.class.isAssignableFrom(boxed1) && Number.class.isAssignableFrom(boxed2)) {
+                return true;
+            }
+            return !Modifier.isFinal(c1.getModifiers()) && !Modifier.isFinal(c2.getModifiers());
+        }
+
+        private boolean arePrimitiveCompatible(Class<?> primitive, Class<?> boxed) {
+            return primitive == Boolean.TYPE ? boxed == Boolean.class : isBoxedNumber(boxed);
+        }
+
+        private boolean isBoxedNumber(Class<?> c) {
+            return Number.class.isAssignableFrom(c) || c == Character.class;
         }
 
         @Override

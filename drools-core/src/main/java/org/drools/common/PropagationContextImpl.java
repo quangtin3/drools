@@ -16,21 +16,24 @@
 
 package org.drools.common;
 
-import java.io.IOException;
-import java.io.ObjectInput;
-import java.io.ObjectOutput;
-import java.util.LinkedList;
-
 import org.drools.FactHandle;
+import org.drools.base.ClassObjectType;
+import org.drools.core.util.BitMaskUtil;
 import org.drools.core.util.ObjectHashSet;
 import org.drools.marshalling.impl.MarshallerReaderContext;
 import org.drools.reteoo.LeftTuple;
 import org.drools.reteoo.ObjectTypeNode;
 import org.drools.reteoo.WindowTupleList;
-import org.drools.rule.EntryPoint;
-import org.drools.rule.Rule;
+import org.drools.rule.*;
 import org.drools.spi.ObjectType;
 import org.drools.spi.PropagationContext;
+
+import java.io.IOException;
+import java.io.ObjectInput;
+import java.io.ObjectOutput;
+import java.util.Collections;
+import java.util.LinkedList;
+import java.util.List;
 
 public class PropagationContextImpl
     implements
@@ -66,15 +69,18 @@ public class PropagationContextImpl
     
     private LinkedList<WorkingMemoryAction> queue2; // for evaluations and fixers
 
-    private long modificationMask = Long.MAX_VALUE;
+    private long               modificationMask = Long.MAX_VALUE;
+    private long               originalMask = Long.MAX_VALUE;
 
-    private WindowTupleList windowTupleList;
+    private Class<?>           modifiedClass;
 
-    private ObjectType objectType;
+    private WindowTupleList    windowTupleList;
+
+    private ObjectType         objectType;
     
     // this field is only set for propagations happening during 
     // the deserialization of a session
-    private MarshallerReaderContext readerContext;
+    private transient MarshallerReaderContext readerContext;
 
     public PropagationContextImpl() {
 
@@ -94,6 +100,7 @@ public class PropagationContextImpl
              0, 
              EntryPoint.DEFAULT,
              Long.MAX_VALUE,
+             Object.class,
              null );
         this.originOffset = -1;
         this.shouldPropagateAll = true;
@@ -116,6 +123,7 @@ public class PropagationContextImpl
              dormantActivations, 
              entryPoint,
              Long.MAX_VALUE,
+             Object.class,
              null );
     }
 
@@ -137,6 +145,7 @@ public class PropagationContextImpl
              dormantActivations, 
              entryPoint,
              modificationMask,
+             Object.class,
              null );
     }
 
@@ -158,6 +167,7 @@ public class PropagationContextImpl
              dormantActivations, 
              entryPoint,
              Long.MAX_VALUE,
+             Object.class,
              readerContext );
     }
 
@@ -170,6 +180,7 @@ public class PropagationContextImpl
                                   final int dormantActivations,
                                   final EntryPoint entryPoint,
                                   final long modificationMask,
+                                  final Class<?> modifiedClass,
                                   final MarshallerReaderContext readerContext ) {
         this.type = type;
         this.rule = rule;
@@ -181,6 +192,8 @@ public class PropagationContextImpl
         this.entryPoint = entryPoint;
         this.originOffset = -1;
         this.modificationMask = modificationMask;
+        this.originalMask = modificationMask;
+        this.modifiedClass = modifiedClass;
         this.readerContext = readerContext;
     }
 
@@ -217,6 +230,10 @@ public class PropagationContextImpl
 
     public long getPropagationNumber() {
         return this.propagationNumber;
+    }
+
+    public void cleanReaderContext() {
+        readerContext = null;
     }
 
     /*
@@ -338,14 +355,10 @@ public class PropagationContextImpl
     }   
     
     public void evaluateActionQueue(InternalWorkingMemory workingMemory) {
-        if ( queue1 == null && queue2 == null ) {
-            return;
-        }
-        
         boolean repeat = true;
         while(repeat) {
             synchronized (queue1) {
-                WorkingMemoryAction action = null;                
+                WorkingMemoryAction action;
                 while ( (action = (!queue1.isEmpty()) ? queue1.removeFirst() : null ) != null ) {
                     action.execute( workingMemory );
                 }
@@ -353,11 +366,11 @@ public class PropagationContextImpl
             
             repeat = false;
             if ( this.queue2 != null ) {
-                WorkingMemoryAction action = null;
-                
-                while ( (action = (!queue2.isEmpty()) ? queue2.removeFirst() : null ) != null ) {
+                WorkingMemoryAction action;
+
+                while ( (action = (!queue2.isEmpty()) ? queue2.removeFirst() : null) != null ) {
                     action.execute( workingMemory );
-                    if ( this.queue1 != null && !this.queue1.isEmpty() ) {
+                    if ( !this.queue1.isEmpty() ) {
                         // Queue1 always takes priority and it's contents should be evaluated first
                         repeat = true;
                         break;
@@ -370,6 +383,47 @@ public class PropagationContextImpl
 
     public long getModificationMask() {
         return modificationMask;
+    }
+
+    public PropagationContext adaptModificationMaskForObjectType(ObjectType type, InternalWorkingMemory workingMemory) {
+        modificationMask = originalMask;
+        if (modificationMask == Long.MAX_VALUE || !(type instanceof ClassObjectType)) {
+            return this;
+        }
+        ClassObjectType classObjectType = (ClassObjectType)type;
+        Class<?> classType = classObjectType.getClassType();
+        if (classType == modifiedClass || !(classType.isInterface() || modifiedClass.isInterface())) {
+            return this;
+        }
+
+        Long cachedMask = classObjectType.getTransformedMask(modifiedClass, originalMask);
+        if (cachedMask != null) {
+            modificationMask = cachedMask;
+            return this;
+        }
+
+        modificationMask = 0L;
+        List<String> typeClassProps = getSettableProperties( workingMemory, classType );
+        List<String> modifiedClassProps = getSettableProperties( workingMemory, modifiedClass );
+
+        for (int i = 0; i < modifiedClassProps.size(); i++) {
+            if (BitMaskUtil.isPositionSet(originalMask, i)) {
+                int posInType = typeClassProps.indexOf(modifiedClassProps.get(i));
+                if (posInType >= 0) {
+                    modificationMask = BitMaskUtil.set(modificationMask, posInType);
+                }
+            }
+        }
+        classObjectType.storeTransformedMask(modifiedClass, originalMask, modificationMask);
+
+        return this;
+    }
+
+    private List<String> getSettableProperties(InternalWorkingMemory workingMemory, Class<?> classType) {
+        String pkgName = classType.getPackage().getName();
+        return "java.lang".equals(pkgName) ?
+                Collections.EMPTY_LIST :
+                workingMemory.getRuleBase().getPackage(pkgName).getTypeDeclaration(classType).getSettableProperties();
     }
 
     public WindowTupleList getActiveWindowTupleList() {

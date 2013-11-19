@@ -1,17 +1,23 @@
 package org.drools.rule.constraint;
 
-import java.lang.reflect.Constructor;
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
-import java.lang.reflect.ParameterizedType;
-import java.lang.reflect.Type;
-import java.util.Arrays;
-import java.util.regex.Pattern;
-
 import org.drools.rule.Declaration;
 import org.mvel2.Operator;
 import org.mvel2.ParserContext;
-import org.mvel2.ast.*;
+import org.mvel2.ast.ASTNode;
+import org.mvel2.ast.And;
+import org.mvel2.ast.BinaryOperation;
+import org.mvel2.ast.BooleanNode;
+import org.mvel2.ast.Contains;
+import org.mvel2.ast.Instance;
+import org.mvel2.ast.LiteralNode;
+import org.mvel2.ast.Negation;
+import org.mvel2.ast.NewObjectNode;
+import org.mvel2.ast.Or;
+import org.mvel2.ast.RegExMatch;
+import org.mvel2.ast.Soundslike;
+import org.mvel2.ast.Substatement;
+import org.mvel2.ast.TypeCast;
+import org.mvel2.ast.Union;
 import org.mvel2.compiler.Accessor;
 import org.mvel2.compiler.AccessorNode;
 import org.mvel2.compiler.CompiledExpression;
@@ -38,10 +44,19 @@ import org.mvel2.optimizers.impl.refl.nodes.StaticVarAccessor;
 import org.mvel2.optimizers.impl.refl.nodes.ThisValueAccessor;
 import org.mvel2.optimizers.impl.refl.nodes.VariableAccessor;
 
-import java.lang.reflect.*;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.ArrayList;
-import java.util.List;
+import java.util.Arrays;
 import java.util.Iterator;
+import java.util.List;
+import java.util.regex.Pattern;
 
 import static org.drools.core.util.ClassUtils.convertToPrimitiveType;
 
@@ -50,9 +65,11 @@ public class ConditionAnalyzer {
     private ASTNode node;
     private ExecutableLiteral executableLiteral;
     private final Declaration[] declarations;
+    private final String conditionClass;
 
-    public ConditionAnalyzer(ExecutableStatement stmt, Declaration[] declarations) {
+    public ConditionAnalyzer(ExecutableStatement stmt, Declaration[] declarations, String conditionClass) {
         this.declarations = declarations;
+        this.conditionClass = conditionClass;
         if (stmt instanceof ExecutableLiteral) {
             executableLiteral = (ExecutableLiteral)stmt;
         } else if (stmt instanceof CompiledExpression) {
@@ -114,8 +131,7 @@ public class ConditionAnalyzer {
             if (pattern != null) {
                 condition.right = new FixedExpression(String.class, pattern.pattern());
             } else {
-                ExecutableStatement regExStmt = (ExecutableStatement)getFieldValue(RegExMatch.class, "patternStmt", regExNode);
-                condition.right = analyzeNode(((ExecutableAccessor)regExStmt).getNode());
+                condition.right = analyzeNode(((ExecutableAccessor)regExNode.getPatternStatement()).getNode());
             }
         } else if (node instanceof Contains) {
             condition.left = analyzeNode(((Contains)node).getFirstStatement());
@@ -170,8 +186,14 @@ public class ConditionAnalyzer {
         }
 
         if (node instanceof TypeCast) {
-            ExecutableAccessor accessor = (ExecutableAccessor) ((TypeCast)node).getStatement();
-            return new CastExpression(node.getEgressType(), analyzeNode(accessor.getNode()));
+            ExecutableStatement statement = ((TypeCast)node).getStatement();
+            if (statement instanceof ExecutableAccessor) {
+                ExecutableAccessor accessor = (ExecutableAccessor) statement;
+                return new CastExpression(node.getEgressType(), analyzeNode(accessor.getNode()));
+            } else {
+                ExecutableLiteral literal = (ExecutableLiteral) statement;
+                return new CastExpression(node.getEgressType(), new FixedExpression(literal.getLiteral()));
+            }
         }
 
         if (node instanceof Union) {
@@ -181,7 +203,7 @@ public class ConditionAnalyzer {
             EvaluatedExpression expression = new EvaluatedExpression();
             expression.firstExpression = analyzeNode(main);
             if (accessor instanceof DynamicGetAccessor) {
-                AccessorNode accessorNode = (AccessorNode)((DynamicGetAccessor)accessor).getAccessor();
+                AccessorNode accessorNode = (AccessorNode)((DynamicGetAccessor)accessor).getSafeAccessor();
                 expression.addInvocation(analyzeAccessor(accessorNode, null));
             } else if (accessor instanceof AccessorNode) {
                 AccessorNode accessorNode = (AccessorNode)accessor;
@@ -253,7 +275,7 @@ public class ConditionAnalyzer {
     private Expression analyzeAccessor(Accessor accessor) {
         AccessorNode accessorNode;
         if (accessor instanceof DynamicGetAccessor) {
-            accessorNode = (AccessorNode)((DynamicGetAccessor)accessor).getAccessor();
+            accessorNode = (AccessorNode)((DynamicGetAccessor)accessor).getSafeAccessor();
         } else if (accessor instanceof AccessorNode) {
             accessorNode = (AccessorNode)accessor;
         } else if (accessor instanceof CompiledExpression) {
@@ -334,7 +356,7 @@ public class ConditionAnalyzer {
 
     private Invocation analyzeAccessor(AccessorNode accessorNode, Invocation formerInvocation) {
         if (accessorNode instanceof GetterAccessor) {
-            return new MethodInvocation(((GetterAccessor)accessorNode).getMethod());
+            return new MethodInvocation(((GetterAccessor)accessorNode).getMethod(), conditionClass);
         }
 
         if (accessorNode instanceof MethodAccessor) {
@@ -476,6 +498,7 @@ public class ConditionAnalyzer {
                 if (declaration.getExtractor() != null) {
                     return declaration.getExtractor().getExtractToClass();
                 } else {
+                    // TODO when can declaration.getExtractor() be null? (mdp)
                     return declaration.getValueType().getClassType();
                 }
             }
@@ -616,6 +639,10 @@ public class ConditionAnalyzer {
         private final Class<?> type;
         private final Object value;
 
+        FixedExpression(Object value) {
+            this(value.getClass(), value);
+        }
+
         FixedExpression(Class<?> type, Object value) {
             this.type = type == CharSequence.class ? String.class : type;
             this.value = value;
@@ -630,6 +657,18 @@ public class ConditionAnalyzer {
         }
 
         public Class<?> getType() {
+            return type;
+        }
+
+        public Class<?> getTypeAsPrimitive() {
+            if (type == Integer.class) return int.class;
+            if (type == Long.class) return long.class;
+            if (type == Float.class) return float.class;
+            if (type == Double.class) return double.class;
+            if (type == Short.class) return short.class;
+            if (type == Byte.class) return byte.class;
+            if (type == Character.class) return char.class;
+            if (type == Boolean.class) return boolean.class;
             return type;
         }
 
@@ -742,6 +781,14 @@ public class ConditionAnalyzer {
                 return left.getType();
             }
 
+            if (left.getType() == BigDecimal.class || right.getType() == BigDecimal.class) {
+                return BigDecimal.class;
+            }
+
+            if (left.getType() == BigInteger.class || right.getType() == BigInteger.class) {
+                return BigInteger.class;
+            }
+
             Class<?> primitiveLeft = convertToPrimitiveType(left.getType());
             Class<?> primitiveRight = convertToPrimitiveType(right.getType());
             return primitiveLeft == primitiveRight ? primitiveLeft : double.class;
@@ -822,10 +869,14 @@ public class ConditionAnalyzer {
         private final Method method;
 
         public MethodInvocation(Method method) {
-            this.method = getMethodFromSuperclass(method);
+            this(method, null);
         }
 
-        private Method getMethodFromSuperclass(Method method) {
+        public MethodInvocation(Method method, String conditionClass) {
+            this.method = getMethodFromSuperclass(method, conditionClass);
+        }
+
+        private Method getMethodFromSuperclass(Method method, String conditionClass) {
             if (method == null) {
                 return method;
             }
@@ -833,15 +884,19 @@ public class ConditionAnalyzer {
             Class<?> declaringSuperclass = declaringClass.getSuperclass();
             if (declaringSuperclass != null) {
                 try {
-                    return getMethodFromSuperclass(declaringSuperclass.getMethod(method.getName(), method.getParameterTypes()));
+                    return getMethodFromSuperclass(declaringSuperclass.getMethod(method.getName(), method.getParameterTypes()), conditionClass);
                 } catch (Exception e) { }
             }
+            Method iMethod = null;
             for (Class<?> interfaze : declaringClass.getInterfaces()) {
                 try {
-                    return interfaze.getMethod(method.getName(), method.getParameterTypes());
+                    iMethod = interfaze.getMethod(method.getName(), method.getParameterTypes());
+                    if (conditionClass == null || iMethod.getDeclaringClass().getName().equals(conditionClass)) {
+                        return iMethod;
+                    }
                 } catch (Exception e) { }
             }
-            return method;
+            return iMethod == null ? method : iMethod;
         }
 
         public Method getMethod() {

@@ -61,7 +61,7 @@ public class LeftTupleIndexRBTree implements LeftTupleMemory, Externalizable {
     public void remove(LeftTuple tuple) {
         LeftTupleList list = tuple.getMemory();
         list.remove(tuple);
-        if (list.size() == 0) {
+        if (list.getFirst() == null) {
             tree.delete(((Node<Comparable<Comparable>>)list).key);
         }
         size--;
@@ -107,7 +107,9 @@ public class LeftTupleIndexRBTree implements LeftTupleMemory, Externalizable {
     }
 
     public Iterator iterator() {
-        return new FastIterator.IteratorAdapter(fastIterator());
+        LeftTupleList list = tree.first();
+        LeftTuple firstTuple = list != null ? list.first : null;
+        return new FastIterator.IteratorAdapter(fastIterator(), firstTuple);
     }
 
     public boolean contains(LeftTuple leftTuple) {
@@ -161,6 +163,9 @@ public class LeftTupleIndexRBTree implements LeftTupleMemory, Externalizable {
 
     public class LeftTupleFastIterator implements FastIterator {
         public Entry next(Entry object) {
+            if (object == null) {
+                return null;
+            }
             LeftTuple leftTuple = (LeftTuple) object;
             LeftTuple next = (LeftTuple) leftTuple.getNext();
             if (next != null) {

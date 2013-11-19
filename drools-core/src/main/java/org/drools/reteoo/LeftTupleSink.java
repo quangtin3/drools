@@ -16,11 +16,11 @@
 
 package org.drools.reteoo;
 
-import java.io.Externalizable;
-
 import org.drools.common.InternalFactHandle;
 import org.drools.common.InternalWorkingMemory;
 import org.drools.spi.PropagationContext;
+
+import java.io.Externalizable;
 
 /**
  * Receiver of propagated <code>ReteTuple</code>s from a
@@ -33,7 +33,7 @@ public interface LeftTupleSink
     Externalizable,
     Sink {
 
-    public short getType();
+    short getType();
     
     /**
      * Assert a new <code>ReteTuple</code>.
@@ -53,41 +53,41 @@ public interface LeftTupleSink
                           PropagationContext context,
                           InternalWorkingMemory workingMemory);
 
-    public boolean isLeftTupleMemoryEnabled();
+    boolean isLeftTupleMemoryEnabled();
 
-    public void setLeftTupleMemoryEnabled(boolean tupleMemoryEnabled);
+    void setLeftTupleMemoryEnabled(boolean tupleMemoryEnabled);
     
-    public void modifyLeftTuple(InternalFactHandle factHandle,
-                                ModifyPreviousTuples modifyPreviousTuples,
-                                PropagationContext context,
-                                InternalWorkingMemory workingMemory);
+    void modifyLeftTuple(InternalFactHandle factHandle,
+                         ModifyPreviousTuples modifyPreviousTuples,
+                         PropagationContext context,
+                         InternalWorkingMemory workingMemory);
     
-    public LeftTupleSource getLeftTupleSource();
+    LeftTupleSource getLeftTupleSource();
 
-    public void modifyLeftTuple(LeftTuple leftTuple,
-                                PropagationContext context,
-                                InternalWorkingMemory workingMemory);
-    
-    public LeftTuple createLeftTuple(final InternalFactHandle factHandle,
-                                     LeftTupleSink sink,
-                                     boolean leftTupleMemoryEnabled);
-    
-    public LeftTuple createLeftTuple(LeftTuple leftTuple,
-                                     LeftTupleSink sink,
-                                     boolean leftTupleMemoryEnabled);   
-    
-    public LeftTuple createLeftTuple(LeftTuple leftTuple,
-                                     RightTuple rightTuple,
-                                     LeftTupleSink sink);    
-    
-    public LeftTuple createLeftTuple(LeftTuple leftTuple,
-                                     RightTuple rightTuple,
-                                     LeftTuple currentLeftChild,
-                                     LeftTuple currentRightChild,
-                                     LeftTupleSink sink,
-                                     boolean leftTupleMemoryEnabled);   
-    
-    int getLeftInputOtnId();
+    void modifyLeftTuple(LeftTuple leftTuple,
+                         PropagationContext context,
+                         InternalWorkingMemory workingMemory);
 
-    void setLeftInputOtnId(int leftInputOtnId);    
+    LeftTuple createLeftTuple(final InternalFactHandle factHandle,
+                              LeftTupleSink sink,
+                              boolean leftTupleMemoryEnabled);
+    
+    LeftTuple createLeftTuple(LeftTuple leftTuple,
+                              LeftTupleSink sink,
+                              boolean leftTupleMemoryEnabled);
+    
+    LeftTuple createLeftTuple(LeftTuple leftTuple,
+                              RightTuple rightTuple,
+                              LeftTupleSink sink);
+    
+    LeftTuple createLeftTuple(LeftTuple leftTuple,
+                              RightTuple rightTuple,
+                              LeftTuple currentLeftChild,
+                              LeftTuple currentRightChild,
+                              LeftTupleSink sink,
+                              boolean leftTupleMemoryEnabled);
+
+    ObjectTypeNode.Id getLeftInputOtnId();
+
+    void setLeftInputOtnId(ObjectTypeNode.Id leftInputOtnId);
 }

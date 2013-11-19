@@ -122,7 +122,7 @@ public class ClassGenerator {
 
     public byte[] generateBytecode() {
         if (bytecode == null) {
-            ClassWriter cw = new InternalClassWriter(classLoader, ClassWriter.COMPUTE_MAXS + ClassWriter.COMPUTE_FRAMES);
+            ClassWriter cw = new InternalClassWriter(classLoader, ClassWriter.COMPUTE_MAXS);
             cw.visit(version, access, getClassDescriptor(), signature, getSuperClassDescriptor(), toInteralNames(interfaces));
             for (int i = 0; i < classParts.size(); i++) { // don't use iterator to allow method visits to add more class fields and methods
                 classParts.get(i).write(this, cw);
@@ -678,8 +678,9 @@ public class ClassGenerator {
                 if (to.isPrimitive()) {
                     castPrimitiveToPrimitive(from, to);
                 } else {
-                    castPrimitiveToPrimitive(from, convertToPrimitiveType(to));
-                    castFromPrimitive(from);
+                    Class toPrimitive = convertToPrimitiveType(to);
+                    castPrimitiveToPrimitive(convertToPrimitiveType(from), toPrimitive);
+                    castFromPrimitive(toPrimitive);
                 }
             } else {
                 if (to.isPrimitive()) {

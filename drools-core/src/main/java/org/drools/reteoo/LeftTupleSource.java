@@ -33,6 +33,12 @@ import org.drools.spi.ClassWireable;
 import org.drools.spi.ObjectType;
 import org.drools.spi.PropagationContext;
 
+import java.io.Externalizable;
+import java.io.IOException;
+import java.io.ObjectInput;
+import java.io.ObjectOutput;
+import java.util.List;
+
 import static org.drools.core.util.BitMaskUtil.intersect;
 import static org.drools.reteoo.PropertySpecificUtil.calculateNegativeMask;
 import static org.drools.reteoo.PropertySpecificUtil.calculatePositiveMask;
@@ -65,7 +71,7 @@ public abstract class LeftTupleSource extends BaseNode
     protected LeftTupleSinkPropagator sink;
 
     
-    private transient int              leftInputOtnId;
+    private transient ObjectTypeNode.Id leftInputOtnId;
 
     // ------------------------------------------------------------
     // Constructors
@@ -217,17 +223,9 @@ public abstract class LeftTupleSource extends BaseNode
 
         Pattern pattern = context.getLastBuiltPatterns()[1]; // left input pattern
 
-        ObjectType objectType;
-        if ( pattern == null || this instanceof AccumulateNode ) {
-            ObjectSource objectSource = ((LeftInputAdapterNode) leftInput).getParentObjectSource();
-            if ( !(objectSource instanceof ObjectTypeNode) ) {
-                leftDeclaredMask = Long.MAX_VALUE;
-                return;
-            }
-            objectType = ((ObjectTypeNode) objectSource).getObjectType();
-        } else {
-            objectType = pattern.getObjectType();
-        }
+        ObjectType objectType = pattern == null || this instanceof AccumulateNode ?
+            ((LeftInputAdapterNode)leftInput).getParentObjectSource().getObjectTypeNode().getObjectType() :
+            pattern.getObjectType();
 
         if ( !(objectType instanceof ClassObjectType) ) {
             // Only ClassObjectType can use property specific
@@ -284,10 +282,11 @@ public abstract class LeftTupleSource extends BaseNode
                                          PropagationContext context,
                                          InternalWorkingMemory workingMemory,
                                          LeftTupleSink sink,
-                                         int leftInputOtnId,
+                                         ObjectTypeNode.Id leftInputOtnId,
                                          long leftInferredMask) {
         LeftTuple leftTuple = modifyPreviousTuples.peekLeftTuple();
-        while ( leftTuple != null && leftTuple.getLeftTupleSink().getLeftInputOtnId() < leftInputOtnId ) {
+        while ( leftTuple != null && leftTuple.getLeftTupleSink().getLeftInputOtnId() != null &&
+                leftTuple.getLeftTupleSink().getLeftInputOtnId().before( leftInputOtnId ) ) {
             modifyPreviousTuples.removeLeftTuple();
             // we skipped this node, due to alpha hashing, so retract now
             leftTuple.getLeftTupleSink().retractLeftTuple( leftTuple,
@@ -296,7 +295,8 @@ public abstract class LeftTupleSource extends BaseNode
             leftTuple = modifyPreviousTuples.peekLeftTuple();
         }
 
-        if ( leftTuple != null && leftTuple.getLeftTupleSink().getLeftInputOtnId() == leftInputOtnId ) {
+        if ( leftTuple != null && leftTuple.getLeftTupleSink().getLeftInputOtnId() != null &&
+             leftTuple.getLeftTupleSink().getLeftInputOtnId().equals( leftInputOtnId ) ) {
             modifyPreviousTuples.removeLeftTuple();
             leftTuple.reAdd();
             if ( intersect( context.getModificationMask(), leftInferredMask ) ) {
@@ -356,11 +356,11 @@ public abstract class LeftTupleSource extends BaseNode
         return leftNegativeMask;
     }
 
-    public int getLeftInputOtnId() {
+    public ObjectTypeNode.Id getLeftInputOtnId() {
         return leftInputOtnId;
     }
 
-    public void setLeftInputOtnId(int leftInputOtnId) {
+    public void setLeftInputOtnId(ObjectTypeNode.Id leftInputOtnId) {
         this.leftInputOtnId = leftInputOtnId;
     }
 

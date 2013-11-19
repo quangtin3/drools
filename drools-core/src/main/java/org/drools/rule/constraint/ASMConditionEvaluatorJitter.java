@@ -15,6 +15,8 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.Iterator;
@@ -343,27 +345,46 @@ public class ASMConditionEvaluatorJitter {
                     invokeStatic(EvaluatorHelper.class, "soundslike", boolean.class, String.class, String.class);
                     break;
                 default:
-                    if (operation.isEquality()) {
+                    if (operation.isEquality() && type != BigDecimal.class) {
                         if (type.isInterface()) {
                             invokeInterface(type, "equals", boolean.class, Object.class);
                         } else {
                             invokeVirtual(type, "equals", boolean.class, Object.class);
                         }
-                        if (operation == BooleanOperator.NE) {
-                            singleCondition.toggleNegation();
-                        }
                     } else {
                         if (type.isInterface()) {
-                            invokeInterface(type, "compareTo", int.class, type == Comparable.class ? Object.class : type);
+                            invokeInterface(type, "compareTo", int.class, type == Comparable.class ? Object.class : findComparingClass(type));
                         } else {
-                            invokeVirtual(type, "compareTo", int.class, type);
+                            invokeVirtual(type, "compareTo", int.class, findComparingClass(type));
                         }
                         mv.visitInsn(ICONST_0);
-                        jitPrimitiveOperation(operation, int.class);
+                        jitPrimitiveOperation(operation == BooleanOperator.NE ? BooleanOperator.EQ : operation, int.class);
+                    }
+                    if (operation == BooleanOperator.NE) {
+                        singleCondition.toggleNegation();
                     }
             }
 
             mv.visitLabel(shortcutEvaluation);
+        }
+
+        private Class<?> findComparingClass(Class<?> type) {
+            return findComparingClass(type, type);
+        }
+
+        private Class<?> findComparingClass(Class<?> type, Class<?> originalType) {
+            if (type == null) {
+                return originalType;
+            }
+            for (Type interfaze : type.getGenericInterfaces()) {
+                if (interfaze instanceof ParameterizedType) {
+                    ParameterizedType pType = (ParameterizedType)interfaze;
+                    if (pType.getRawType() == Comparable.class) {
+                        return (Class<?>) pType.getActualTypeArguments()[0];
+                    }
+                }
+            }
+            return findComparingClass(type.getSuperclass(), originalType);
         }
 
         private void prepareLeftOperand(BooleanOperator operation, Class<?> type, Class<?> leftType, Class<?> rightType, Label shortcutEvaluation) {
@@ -543,7 +564,7 @@ public class ASMConditionEvaluatorJitter {
 
         private Class<?> jitCastExpression(CastExpression exp) {
             jitExpression(exp.expression, Object.class);
-            cast(exp.getType());
+            cast(exp.expression instanceof FixedExpression ? ((FixedExpression)exp.expression).getTypeAsPrimitive() : exp.expression.getType(), exp.getType());
             return exp.getType();
         }
 
@@ -593,12 +614,18 @@ public class ASMConditionEvaluatorJitter {
         private Class<?> jitAritmeticExpression(AritmeticExpression aritmeticExpression) {
             if (aritmeticExpression.isStringConcat()) {
                 jitStringConcat(aritmeticExpression.left, aritmeticExpression.right);
+                return String.class;
+            }
+
+            Class<?> operationType = aritmeticExpression.getType();
+            if (operationType == BigDecimal.class || operationType == BigInteger.class) {
+                jitExpression(aritmeticExpression.left, operationType);
+                jitExpression(aritmeticExpression.right, operationType);
             } else {
-                Class<?> operationType = aritmeticExpression.getType();
                 jitExpressionToPrimitiveType(aritmeticExpression.left, operationType);
                 jitExpressionToPrimitiveType(aritmeticExpression.right, aritmeticExpression.operator.isBitwiseOperation() ? int.class : operationType);
-                jitAritmeticOperation(operationType, aritmeticExpression.operator);
             }
+            jitAritmeticOperation(operationType, aritmeticExpression.operator);
             return aritmeticExpression.getType();
         }
 
@@ -671,7 +698,7 @@ public class ASMConditionEvaluatorJitter {
                         mv.visitInsn(LREM);
                         break;
                 }
-            } else {
+            } else if (operationType == double.class) {
                 switch(operator) {
                     case ADD:
                         mv.visitInsn(DADD);
@@ -689,6 +716,27 @@ public class ASMConditionEvaluatorJitter {
                         mv.visitInsn(DREM);
                         break;
                 }
+            } else if (operationType == BigDecimal.class || operationType == BigInteger.class) {
+                try {
+                    switch(operator) {
+                        case ADD:
+                            invoke(operationType.getMethod("add", operationType));
+                            break;
+                        case SUB:
+                            invoke(operationType.getMethod("subtract", operationType));
+                            break;
+                        case MUL:
+                            invoke(operationType.getMethod("multiply", operationType));
+                            break;
+                        case DIV:
+                            invoke(operationType.getMethod("divide", operationType));
+                            break;
+                    }
+                } catch (NoSuchMethodException e) {
+                    throw new RuntimeException(e);
+                }
+            } else {
+                throw new RuntimeException("Unknown operation type" + operationType);
             }
         }
 
@@ -862,8 +910,14 @@ public class ASMConditionEvaluatorJitter {
                 result = convertFromPrimitiveType(class1);
             } else if (class1 == Object.class) {
                 result = convertFromPrimitiveType(class2);
+                if (Number.class.isAssignableFrom(result) && !result.getSimpleName().startsWith("Big")) {
+                    result = Double.class;
+                }
             } else if (class2 == Object.class) {
                 result = convertFromPrimitiveType(class1);
+                if (Number.class.isAssignableFrom(result) && !result.getSimpleName().startsWith("Big")) {
+                    result = Double.class;
+                }
             } else if (class1 == String.class) {
                 result = convertFromPrimitiveType(class2);
             } else if (class2 == String.class) {

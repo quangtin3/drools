@@ -24,8 +24,12 @@ import org.drools.runtime.rule.Variable;
 import org.drools.spi.InternalReadAccessor;
 import org.drools.spi.WriteAccessor;
 
+import java.util.Map;
+
 
 public class StudentProxy3 extends TraitProxy implements IStudent {
+
+    private static final String traitType = IStudent.class.getName();
 
     private  TripleFactory tripleFactory = new TripleFactoryImpl();
 
@@ -42,9 +46,10 @@ public class StudentProxy3 extends TraitProxy implements IStudent {
 
     public StudentProxy3(Imp2 obj, final TripleStore m, TripleFactory factory) {
 
+        System.out.println( "ABSCS" );
 
         this.object = obj;
-         m.getId();
+        m.getId();
 
         setTripleFactory( factory );
 
@@ -52,14 +57,23 @@ public class StudentProxy3 extends TraitProxy implements IStudent {
         (( TripleBasedStruct ) fields).setTripleFactory( factory );
 
 
-        obj.setDynamicProperties( new TripleBasedBean(obj,m,factory) );
+        if ( obj._getDynamicProperties() == null ) {
+            obj._setDynamicProperties( new TripleBasedBean(obj,m,factory) );
+        }
 
-        obj.setTraitMap( new TripleBasedTypes(obj,m,factory) );
+        if ( obj._getTraitMap() == null ) {
+            obj._setTraitMap( new TraitTypeMap( new TripleBasedTypes(obj,m,factory) ) );
+        }
 
     }
 
     public Imp2 getCore() {
         return object;
+    }
+
+    @Override
+    public String getTraitName() {
+        return traitType;
     }
 
     public Object getObject() {
@@ -71,8 +85,17 @@ public class StudentProxy3 extends TraitProxy implements IStudent {
         return "(@Student) : " + getFields().entrySet().toString();
     }
 
+     public boolean getX( String k ) {
+         if ( getMap() == null ) {
+             return false;
+         }
+         return getMap().containsKey( k );
+     }
 
 
+    public Map getMap() {
+        return null;
+    }
 
     public double getD() {
         return bit_reader.getDoubleValue( object );
@@ -155,4 +178,7 @@ public class StudentProxy3 extends TraitProxy implements IStudent {
         result = 31 * result + this.getFields().hashCode();
         return result;
     }
+
+
+
 }

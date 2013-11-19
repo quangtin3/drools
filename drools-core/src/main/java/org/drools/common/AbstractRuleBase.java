@@ -16,6 +16,36 @@
 
 package org.drools.common;
 
+import org.drools.PackageIntegrationException;
+import org.drools.RuleBase;
+import org.drools.RuleBaseConfiguration;
+import org.drools.RuntimeDroolsException;
+import org.drools.SessionConfiguration;
+import org.drools.StatefulSession;
+import org.drools.base.ClassFieldAccessorCache;
+import org.drools.core.util.ObjectHashSet;
+import org.drools.core.util.TripleStore;
+import org.drools.definition.process.Process;
+import org.drools.definition.type.FactType;
+import org.drools.event.RuleBaseEventListener;
+import org.drools.event.RuleBaseEventSupport;
+import org.drools.factmodel.traits.TraitRegistry;
+import org.drools.factmodel.FieldDefinition;
+import org.drools.impl.EnvironmentFactory;
+import org.drools.management.DroolsManagementAgent;
+import org.drools.rule.DialectRuntimeRegistry;
+import org.drools.rule.Function;
+import org.drools.rule.ImportDeclaration;
+import org.drools.rule.InvalidPatternException;
+import org.drools.rule.JavaDialectRuntimeData;
+import org.drools.rule.Package;
+import org.drools.rule.Rule;
+import org.drools.rule.TypeDeclaration;
+import org.drools.rule.WindowDeclaration;
+import org.drools.spi.FactHandleFactory;
+import org.drools.util.ClassLoaderUtil;
+import org.drools.util.CompositeClassLoader;
+
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.Externalizable;
@@ -35,35 +65,6 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
-
-import org.drools.PackageIntegrationException;
-import org.drools.RuleBase;
-import org.drools.RuleBaseConfiguration;
-import org.drools.RuntimeDroolsException;
-import org.drools.SessionConfiguration;
-import org.drools.StatefulSession;
-import org.drools.base.ClassFieldAccessorCache;
-import org.drools.core.util.ObjectHashSet;
-import org.drools.core.util.TripleStore;
-import org.drools.definition.process.Process;
-import org.drools.definition.type.FactType;
-import org.drools.event.RuleBaseEventListener;
-import org.drools.event.RuleBaseEventSupport;
-import org.drools.factmodel.traits.TripleStoreRegistry;
-import org.drools.impl.EnvironmentFactory;
-import org.drools.management.DroolsManagementAgent;
-import org.drools.rule.DialectRuntimeRegistry;
-import org.drools.rule.Function;
-import org.drools.rule.ImportDeclaration;
-import org.drools.rule.InvalidPatternException;
-import org.drools.rule.JavaDialectRuntimeData;
-import org.drools.rule.Package;
-import org.drools.rule.Rule;
-import org.drools.rule.TypeDeclaration;
-import org.drools.rule.WindowDeclaration;
-import org.drools.spi.FactHandleFactory;
-import org.drools.util.ClassLoaderUtil;
-import org.drools.util.CompositeClassLoader;
 
 import static org.drools.core.util.BitMaskUtil.isSet;
 
@@ -101,7 +102,7 @@ abstract public class AbstractRuleBase
 
     private transient Map<String, Class<?>>               globals;
 
-    private final transient Queue<DialectRuntimeRegistry> reloadPackageCompilationData = new ConcurrentLinkedQueue<DialectRuntimeRegistry>();
+    private final transient Queue<Package>                reloadPackageCompilationData = new ConcurrentLinkedQueue<Package>();
 
     private RuleBaseEventSupport                          eventSupport                 = new RuleBaseEventSupport( this );
 
@@ -126,6 +127,7 @@ abstract public class AbstractRuleBase
     private List<RuleBasePartitionId>                     partitionIDs;
 
     private ClassFieldAccessorCache                       classFieldAccessorCache;
+
 
     /**
      * Default constructor - for Externalizable. This should never be used by a user, as it
@@ -183,6 +185,8 @@ abstract public class AbstractRuleBase
         this.classFieldAccessorCache = new ClassFieldAccessorCache( this.rootClassLoader );
 
         this.getConfiguration().getComponentFactory().getTraitFactory().setRuleBase( this );
+        this.getConfiguration().getComponentFactory().getTripleStore().setId( id );
+
     }
 
     private void createRulebaseId( final String id ) {
@@ -516,6 +520,8 @@ abstract public class AbstractRuleBase
                 this.additionsSinceLock++;
                 this.eventSupport.fireBeforePackageAdded( newPkg );
 
+                getTraitRegistry().merge( newPkg.getTraitRegistry() );
+
                 Package pkg = this.pkgs.get( newPkg.getName() );
                 if ( pkg == null ) {
                     pkg = new Package( newPkg.getName() );
@@ -530,6 +536,7 @@ abstract public class AbstractRuleBase
                 pkg.getDialectRuntimeRegistry().merge( newPkg.getDialectRuntimeRegistry(),
                                                        this.rootClassLoader,
                                                        true );
+
             }
 
 
@@ -591,7 +598,7 @@ abstract public class AbstractRuleBase
              // now iterate again, this time onBeforeExecute will handle any wiring or cloader re-creating that needs to be done as part of the merge
             for (Package newPkg : newPkgs) {
                 Package pkg = this.pkgs.get( newPkg.getName() );
-
+                
                 // this needs to go here, as functions will set a java dialect to dirty
                 if (newPkg.getFunctions() != null) {
                     for (Map.Entry<String, Function> entry : newPkg.getFunctions().entrySet()) {
@@ -1077,7 +1084,7 @@ abstract public class AbstractRuleBase
             removeRule( pkg,
                         rule );
             pkg.removeRule( rule );
-            addReloadDialectDatas( pkg.getDialectRuntimeRegistry() );
+            addReloadDialectDatas( pkg );
         } finally {
             unlock();
         }
@@ -1137,7 +1144,7 @@ abstract public class AbstractRuleBase
                             functionName );
             pkg.removeFunction( functionName );
 
-            addReloadDialectDatas( pkg.getDialectRuntimeRegistry() );
+            addReloadDialectDatas( pkg );
         } finally {
             unlock();
         }
@@ -1259,12 +1266,31 @@ abstract public class AbstractRuleBase
     }
 
     public void executeQueuedActions() {
-        DialectRuntimeRegistry registry;
-        while (( registry = reloadPackageCompilationData.poll() ) != null) {
+        Package pkg = null;
+        while (( pkg = reloadPackageCompilationData.poll() ) != null) {
+            // first reload package compilation data
+            DialectRuntimeRegistry registry = pkg.getDialectRuntimeRegistry();
             registry.onBeforeExecute();
+            // then re-resolve type definitions
+            for( TypeDeclaration type : pkg.getTypeDeclarations().values() ) {
+                try {
+                    type.setTypeClass( this.rootClassLoader.loadClass( type.getTypeClassName() ) );
+                    pkg.setClassFieldAccessorCache( new ClassFieldAccessorCache( this.rootClassLoader ) );
+                    for( FieldDefinition fd : type.getTypeClassDef().getFieldsDefinitions() ) {
+                        fd.setReadWriteAccessor( pkg.getClassFieldAccessorStore().getAccessor( type.getTypeClassName(), fd.getName() ) );
+                    }
+                    
+                    // also re-wire OTNs for that type
+                    updateOTNs( type );
+                } catch ( ClassNotFoundException e ) {
+                    throw new RuntimeDroolsException( "Unable to re-resolve class '" + type.getTypeClassName() + "'" );
+                }
+            }
         }
     }
 
+    protected abstract void updateOTNs(TypeDeclaration type);
+    
     public RuleBasePartitionId createNewPartitionId() {
         RuleBasePartitionId p;
         synchronized (this.partitionIDs) {
@@ -1311,6 +1337,9 @@ abstract public class AbstractRuleBase
     public FactType getFactType( final String name ) {
         readLock();
         try {
+            // has to execute queued actions, as there might be pending
+            // compilation data reloads
+            this.executeQueuedActions();
             for (Package pkg : this.pkgs.values()) {
                 FactType type = pkg.getFactType( name );
                 if (type != null) {
@@ -1323,8 +1352,8 @@ abstract public class AbstractRuleBase
         }
     }
 
-    private void addReloadDialectDatas( DialectRuntimeRegistry registry ) {
-        this.reloadPackageCompilationData.offer( registry );
+    private void addReloadDialectDatas( Package pkg ) {
+        this.reloadPackageCompilationData.offer( pkg );
     }
 
     public static interface RuleBaseAction
@@ -1347,7 +1376,11 @@ abstract public class AbstractRuleBase
     }
 
     public TripleStore getTripleStore() {
-        return TripleStoreRegistry.getRegistry( id );
+        return this.getConfiguration().getComponentFactory().getTripleStore();
+    }
+
+    public TraitRegistry getTraitRegistry() {
+        return this.getConfiguration().getComponentFactory().getTraitRegistry();
     }
 
 }

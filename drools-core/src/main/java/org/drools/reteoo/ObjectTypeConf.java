@@ -33,7 +33,9 @@ public interface ObjectTypeConf {
     public boolean isActive();
 
     public boolean isEvent();
-    
+
+    public boolean isTrait();
+
     public boolean isDynamic();
    
     public TypeDeclaration getTypeDeclaration();
@@ -49,5 +51,7 @@ public interface ObjectTypeConf {
     public EntryPoint getEntryPoint();
     
     public boolean isSupportsPropertyChangeListeners();
+    
+    public String getTypeName();
 
 }

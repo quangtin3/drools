@@ -16,19 +16,12 @@
 
 package org.drools.reteoo;
 
-import java.io.Externalizable;
-import java.io.IOException;
-import java.io.ObjectInput;
-import java.io.ObjectOutput;
-import java.util.List;
-
 import org.drools.RuleBaseConfiguration;
 import org.drools.base.ClassObjectType;
 import org.drools.base.DroolsQuery;
 import org.drools.base.ValueType;
 import org.drools.builder.conf.LRUnlinkingOption;
 import org.drools.common.AbstractRuleBase;
-import org.drools.common.BaseNode;
 import org.drools.common.DroolsObjectInputStream;
 import org.drools.common.EventFactHandle;
 import org.drools.common.InternalFactHandle;
@@ -65,6 +58,12 @@ import org.drools.time.TimerService;
 import org.drools.time.impl.DefaultJobHandle;
 import org.drools.time.impl.PointInTimeTrigger;
 
+import java.io.Externalizable;
+import java.io.IOException;
+import java.io.ObjectInput;
+import java.io.ObjectOutput;
+import java.util.List;
+
 /**
  * <code>ObjectTypeNodes<code> are responsible for filtering and propagating the matching
  * fact assertions propagated from the <code>Rete</code> node using <code>ObjectType</code> interface.
@@ -94,7 +93,7 @@ public class ObjectTypeNode extends ObjectSource
     /**
      * The <code>ObjectType</code> semantic module.
      */
-    private ObjectType                      objectType;
+    protected ObjectType                    objectType;
 
     private boolean                         objectMemoryEnabled;
 
@@ -104,16 +103,16 @@ public class ObjectTypeNode extends ObjectSource
 
     private boolean                         queryNode;
 
-    private CompiledNetwork                 compiledNetwork;
+    protected CompiledNetwork               compiledNetwork;
 
     /* always dirty after serialisation */
-    private transient boolean               dirty;
+    protected transient boolean             dirty;
 
     /* reset counter when dirty */
-    private transient int                   otnIdCounter;
+    protected transient IdGenerator         idGenerator;
 
     public int getOtnIdCounter() {
-        return otnIdCounter;
+        return idGenerator.otnIdCounter;
     }
 
     /** @see LRUnlinkingOption */
@@ -140,7 +139,8 @@ public class ObjectTypeNode extends ObjectSource
                source,
                context.getRuleBase().getConfiguration().getAlphaNodeHashingThreshold() );
         this.objectType = objectType;
-        this.lrUnlinkingEnabled = context.getRuleBase().getConfiguration().isLRUnlinkingEnabled();
+        idGenerator = new IdGenerator(objectType);
+
         setObjectMemoryEnabled( context.isObjectTypeNodeMemoryEnabled() );
 
         if ( ClassObjectType.DroolsQuery_ObjectType.isAssignableFrom( objectType ) ) {
@@ -148,6 +148,69 @@ public class ObjectTypeNode extends ObjectSource
         }
 
         this.dirty = true;
+    }
+
+    private static class IdGenerator {
+        private final Class<?> otnClass;
+        private int otnIdCounter;
+
+        private IdGenerator(ObjectType objectType) {
+            otnClass = objectType instanceof ClassObjectType ? ((ClassObjectType)objectType).getClassType() : Object.class;
+        }
+
+        private Id nextId() {
+            return new Id(otnClass, otnIdCounter++);
+        }
+
+        private void reset() {
+            otnIdCounter = 0;
+        }
+    }
+
+    public static Id DEFAULT_ID = new Id(Object.class, 0);
+
+    public static class Id {
+
+        private final Class<?> clazz;
+        private final int id;
+
+        public Id(Class<?> clazz, int id) {
+            this.clazz = clazz;
+            this.id = id;
+        }
+
+        @Override
+        public String toString() {
+            return "ObjectTypeNode.Id[" + clazz.getName() + "#" + id + "]";
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || !(o instanceof Id)) return false;
+
+            Id otherId = (Id) o;
+            return id == otherId.id && clazz == otherId.clazz;
+        }
+
+        @Override
+        public int hashCode() {
+            int result = clazz.hashCode();
+            result = 31 * result + id;
+            return result;
+        }
+
+        public boolean before(Id otherId) {
+            return otherId != null && clazz == otherId.clazz && this.id < otherId.id;
+        }
+
+        public Class<?> getTypeNodeClass() {
+            return clazz;
+        }
+
+        public int getId() {
+            return id;
+        }
     }
 
     public void readExternal(ObjectInput in) throws IOException,
@@ -160,6 +223,7 @@ public class ObjectTypeNode extends ObjectSource
         if ( objectType instanceof ClassObjectType ) {
             objectType = ((AbstractRuleBase) ((DroolsObjectInputStream) in).getRuleBase()).getClassFieldAccessorCache().getClassObjectType( (ClassObjectType) objectType );
         }
+        idGenerator = new IdGenerator(objectType);
 
         objectMemoryEnabled = in.readBoolean();
         expirationOffset = in.readLong();
@@ -169,12 +233,12 @@ public class ObjectTypeNode extends ObjectSource
     }
 
     public void writeExternal(ObjectOutput out) throws IOException {
-        super.writeExternal( out );
-        out.writeObject( objectType );
-        out.writeBoolean( objectMemoryEnabled );
-        out.writeLong( expirationOffset );
+        super.writeExternal(out);
+        out.writeObject(objectType);
+        out.writeBoolean(objectMemoryEnabled);
+        out.writeLong(expirationOffset);
         out.writeBoolean( lrUnlinkingEnabled );
-        out.writeBoolean( queryNode );
+        out.writeBoolean(queryNode);
     }
 
     /**
@@ -207,14 +271,14 @@ public class ObjectTypeNode extends ObjectSource
      * can have the matched facts propagated to them.
      *
      * @param factHandle    The fact handle.
-     * @param object        The object to assert.
+     * @param context       The propagation context.
      * @param workingMemory The working memory session.
      */
     public void assertObject(final InternalFactHandle factHandle,
                              final PropagationContext context,
                              final InternalWorkingMemory workingMemory) {
         if ( dirty ) {
-            otnIdCounter = 0;
+            idGenerator.reset();
             updateTupleSinkId( this, this );
             dirty = false;
         }
@@ -244,7 +308,7 @@ public class ObjectTypeNode extends ObjectSource
             TimerService clock = workingMemory.getTimerService();
 
             long nextTimestamp = Math.max( clock.getCurrentTime() + this.expirationOffset,
-                                           ((EventFactHandle) factHandle).getStartTimestamp() + this.expirationOffset );
+                                           ((EventFactHandle) factHandle).getEndTimestamp() + this.expirationOffset );
             JobContext jobctx = new ExpireJobContext( expire,
                                                       workingMemory );
             JobHandle handle = clock.scheduleJob( job,
@@ -261,22 +325,22 @@ public class ObjectTypeNode extends ObjectSource
      * Retract the <code>FactHandleimpl</code> from the <code>Rete</code> network. Also remove the
      * <code>FactHandleImpl</code> from the node memory.
      *
-     * @param rightTuple    The fact handle.
-     * @param object        The object to assert.
+     * @param factHandle    The fact handle.
+     * @param context       The propagation context.
      * @param workingMemory The working memory session.
      */
     public void retractObject(final InternalFactHandle factHandle,
                               final PropagationContext context,
                               final InternalWorkingMemory workingMemory) {
         if ( dirty ) {
-            otnIdCounter = 0;
+            idGenerator.reset();
             updateTupleSinkId( this, this );
             dirty = false;
         }
 
         if ( objectMemoryEnabled && !(queryNode && !((DroolsQuery) factHandle.getObject()).isOpen()) ) {
             final ObjectTypeNodeMemory memory = (ObjectTypeNodeMemory) workingMemory.getNodeMemory( this );
-            memory.memory.remove( factHandle );            
+            memory.memory.remove(factHandle);
         }
 
         for ( RightTuple rightTuple = factHandle.getFirstRightTuple(); rightTuple != null; rightTuple = rightTuple.getHandleNext() ) {
@@ -299,7 +363,7 @@ public class ObjectTypeNode extends ObjectSource
                              PropagationContext context,
                              InternalWorkingMemory workingMemory) {
         if ( dirty ) {
-            otnIdCounter = 0;
+            resetIdGenerator();
             updateTupleSinkId( this, this );
             dirty = false;
         }
@@ -308,44 +372,29 @@ public class ObjectTypeNode extends ObjectSource
         if ( compiledNetwork != null ) {
             compiledNetwork.modifyObject( factHandle,
                                           modifyPreviousTuples,
-                                          context,
+                                          context.adaptModificationMaskForObjectType(objectType, workingMemory),
                                           workingMemory );
         } else {
             this.sink.propagateModifyObject( factHandle,
                                              modifyPreviousTuples,
-                                             context,
+                                             context.adaptModificationMaskForObjectType(objectType, workingMemory),
                                              workingMemory );
+
         }
+    }
+
+    protected void resetIdGenerator() {
+        idGenerator.reset();
     }
 
     public void updateSink(final ObjectSink sink,
                            final PropagationContext context,
                            final InternalWorkingMemory workingMemory) {
-        if ( lrUnlinkingEnabled ) {
-            // Update sink taking into account L&R unlinking peculiarities
-            updateLRUnlinking( sink, context, workingMemory );
-
-        } else {
-            // Regular updateSink
-            final ObjectTypeNodeMemory memory = (ObjectTypeNodeMemory) workingMemory.getNodeMemory( this );
-            Iterator it = memory.memory.iterator();
-    
-            for ( ObjectEntry entry = (ObjectEntry) it.next(); entry != null; entry = (ObjectEntry) it.next() ) {
-                sink.assertObject( (InternalFactHandle) entry.getValue(),
-                                   context,
-                                   workingMemory );
-            }
+        if ( dirty ) {
+            idGenerator.reset();
+            updateTupleSinkId( this, this );
+            dirty = false;
         }
-
-    }
-
-    /**
-     *  When L&R Unlinking is enabled, updateSink() is used to populate 
-     *  a node's memory, but it has to take into account if it's propagating.
-     */
-    private void updateLRUnlinking(final ObjectSink sink,
-                                   final PropagationContext context,
-                                   final InternalWorkingMemory workingMemory) {
 
         final ObjectTypeNodeMemory memory = (ObjectTypeNodeMemory) workingMemory.getNodeMemory( this );
         
@@ -406,8 +455,8 @@ public class ObjectTypeNode extends ObjectSource
         this.dirty = true;
     }
 
-    private static void updateTupleSinkId( ObjectTypeNode otn,
-                                           ObjectSource source ) {
+    protected static void updateTupleSinkId(ObjectTypeNode otn,
+                                            ObjectSource source) {
         for ( ObjectSink sink : source.sink.getSinks() ) {
             if ( sink instanceof BetaNode ) {
                 ((BetaNode) sink).setRightInputOtnId( otn.nextOtnId() );
@@ -421,8 +470,8 @@ public class ObjectTypeNode extends ObjectSource
         }
     }
 
-    public int nextOtnId() {
-        return otnIdCounter++;
+    public Id nextOtnId() {
+        return idGenerator.nextId();
     }
 
     /**
@@ -430,15 +479,13 @@ public class ObjectTypeNode extends ObjectSource
      * never removed from the rulebase in the current implementation
      *
      * @inheritDoc
-     * @see org.drools.common.BaseNode#remove(org.drools.reteoo.RuleRemovalContext, org.drools.reteoo.ReteooBuilder, org.drools.common.BaseNode, org.drools.common.InternalWorkingMemory[])
+     * @see org.drools.common.BaseNode#remove(RuleRemovalContext, ReteooBuilder, org.drools.common.InternalWorkingMemory[])
      */
     public void remove(RuleRemovalContext context,
                        ReteooBuilder builder,
-                       BaseNode node,
                        InternalWorkingMemory[] workingMemories) {
         doRemove( context,
                   builder,
-                  node,
                   workingMemories );
     }
 
@@ -448,7 +495,6 @@ public class ObjectTypeNode extends ObjectSource
      */
     protected void doRemove(final RuleRemovalContext context,
                             final ReteooBuilder builder,
-                            final BaseNode node,
                             final InternalWorkingMemory[] workingMemories) {
         if ( context.getCleanupAdapter() != null ) {
             for ( InternalWorkingMemory workingMemory : workingMemories ) {
@@ -465,10 +511,9 @@ public class ObjectTypeNode extends ObjectSource
             }
             context.setCleanupAdapter( null );
         }
-        if ( !node.isInUse() ) {
-            removeObjectSink( (ObjectSink) node );
-        }
     }
+
+    protected void doCollectAncestors(NodeSet nodeSet) { }
 
     /**
      * Creates memory for the node using PrimitiveLongMap as its optimised for storage and reteivals of Longs.
@@ -509,7 +554,7 @@ public class ObjectTypeNode extends ObjectSource
 
         final ObjectTypeNode other = (ObjectTypeNode) object;
 
-        return this.objectType.equals( other.objectType ) && this.source.equals( other.source );
+        return this.objectType.equals(other.objectType) && this.source.equals(other.source);
     }
 
     private boolean usesDeclaration(final Constraint[] constraints) {
@@ -583,8 +628,7 @@ public class ObjectTypeNode extends ObjectSource
 
         /**
          * @param workingMemory
-         * @param behavior
-         * @param behaviorContext
+         * @param expireAction
          */
         public ExpireJobContext(WorkingMemoryReteExpireAction expireAction,
                                 InternalWorkingMemory workingMemory) {

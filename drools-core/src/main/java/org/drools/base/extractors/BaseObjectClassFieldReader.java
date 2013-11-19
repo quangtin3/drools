@@ -16,13 +16,12 @@
 
 package org.drools.base.extractors;
 
-import java.lang.reflect.Method;
-import java.util.Date;
-
 import org.drools.RuntimeDroolsException;
 import org.drools.base.BaseClassFieldReader;
 import org.drools.base.ValueType;
 import org.drools.common.InternalWorkingMemory;
+
+import java.lang.reflect.Method;
 
 public abstract class BaseObjectClassFieldReader extends BaseClassFieldReader {
 
@@ -40,135 +39,113 @@ public abstract class BaseObjectClassFieldReader extends BaseClassFieldReader {
                valueType );
     }
 
-    public BaseObjectClassFieldReader(final Class< ? > clazz,
-                                      final String fieldName) {
-        super( clazz,
-               fieldName );
-    }
-
     public abstract Object getValue(InternalWorkingMemory workingMemory,
                                     Object object);
 
     public boolean getBooleanValue(InternalWorkingMemory workingMemory,
                                    final Object object) {
-        // this can be improved by generating specific
-        // bytecode generation in the subclass, avoiding the if instanceof
         final Object value = getValue( workingMemory,
                                        object );
 
         if ( value instanceof Boolean ) {
             return ((Boolean) value).booleanValue();
         }
-        throw new RuntimeDroolsException( "Conversion to boolean not supported from " + value.getClass().getName() );
+        
+        throw new RuntimeDroolsException( "Conversion to boolean not supported from " + getExtractToClass().getName() );
     }
 
     public byte getByteValue(InternalWorkingMemory workingMemory,
                              final Object object) {
-        // this can be improved by generating specific
-        // bytecode generation in the subclass, avoiding the if instanceof
         final Object value = getValue( workingMemory,
                                        object );
 
-        if ( value instanceof Number ) {
-            return ((Number) value).byteValue();
-        } else if ( value instanceof Date ) {
-            return (byte) ((Date) value).getTime();
-        }
-        throw new RuntimeDroolsException( "Conversion to byte not supported from " + value.getClass().getName() );
+        if ( value instanceof Character ) {
+            return (byte) ((Character) value).charValue();
+        } 
+        
+        throw new RuntimeDroolsException( "Conversion to byte not supported from " +  getExtractToClass().getName());
     }
 
     public char getCharValue(InternalWorkingMemory workingMemory,
                              final Object object) {
-        // this can be improved by generating specific
-        // bytecode generation in the subclass, avoiding the if instanceof
         final Object value = getValue( workingMemory,
                                        object );
 
         if ( value instanceof Character ) {
             return ((Character) value).charValue();
-        } else if ( value instanceof String && ((String) value).length() == 1 ) {
-            return ((String) value).charAt( 0 );
-        }
-        throw new RuntimeDroolsException( "Conversion to char not supported from " + value.getClass().getName() );
+        } 
+        
+        throw new RuntimeDroolsException( "Conversion to char not supported from " +  getExtractToClass().getName() );
     }
 
     public double getDoubleValue(InternalWorkingMemory workingMemory,
                                  final Object object) {
-        // this can be improved by generating specific
-        // bytecode generation in the subclass, avoiding the if instanceof
         final Object value = getValue( workingMemory,
                                        object );
 
-        if ( value instanceof Number ) {
+        if( value instanceof Character ) {
+            return ((Character) value).charValue();
+        } else if ( value instanceof Number ) {
             return ((Number) value).doubleValue();
-        } else if ( value instanceof Date ) {
-            return (double) ((Date) value).getTime();
         }
-        throw new RuntimeDroolsException( "Conversion to double not supported from " + value.getClass().getName() );
+
+        throw new RuntimeDroolsException( "Conversion to double not supported from " +  getExtractToClass().getName() );
     }
 
     public float getFloatValue(InternalWorkingMemory workingMemory,
                                final Object object) {
-        // this can be improved by generating specific
-        // bytecode generation in the subclass, avoiding the if instanceof
         final Object value = getValue( workingMemory,
                                        object );
 
-        if ( value instanceof Number ) {
+        if( value instanceof Character ) {
+            return ((Character) value).charValue();
+        } else if ( value instanceof Number ) {
             return ((Number) value).floatValue();
-        } else if ( value instanceof Date ) {
-            return (float) ((Date) value).getTime();
         }
-        throw new RuntimeDroolsException( "Conversion to float not supported from " + value.getClass().getName() );
+
+        throw new RuntimeDroolsException( "Conversion to float not supported from " +  getExtractToClass().getName() );
     }
 
     public int getIntValue(InternalWorkingMemory workingMemory,
                            final Object object) {
-        // this can be improved by generating specific
-        // bytecode generation in the subclass, avoiding the if instanceof
         final Object value = getValue( workingMemory,
                                        object );
 
-        if ( value instanceof Number ) {
-            return ((Number) value).intValue();
-        } else if ( value instanceof Date ) {
-            return (int) ((Date) value).getTime();
-        } else if( value instanceof Character ) {
+        if( value instanceof Character ) {
             return ((Character) value).charValue();
+        } else if ( value instanceof Number ) {
+            return ((Number) value).intValue();
         }
-        throw new RuntimeDroolsException( "Conversion to int not supported from " + value.getClass().getName() );
+
+        throw new RuntimeDroolsException( "Conversion to int not supported from " +  getExtractToClass().getName() );
     }
 
     public long getLongValue(InternalWorkingMemory workingMemory,
                              final Object object) {
-        // this can be improved by generating specific
-        // bytecode generation in the subclass, avoiding the if instanceof
         final Object value = getValue( workingMemory,
                                        object );
 
-        if ( value instanceof Number ) {
-            return ((Number) value).longValue();
-        } else if ( value instanceof Date ) {
-            return ((Date) value).getTime();
-        } else if( value instanceof Character ) {
+        if( value instanceof Character ) {
             return ((Character) value).charValue();
+        } else if ( value instanceof Number ) {
+            return ((Number) value).longValue();
         }
-        throw new RuntimeDroolsException( "Conversion to long not supported from " + value.getClass().getName() );
+
+        throw new RuntimeDroolsException( "Conversion to long not supported from " +  getExtractToClass().getName() );
     }
 
     public short getShortValue(InternalWorkingMemory workingMemory,
                                final Object object) {
-        // this can be improved by generating specific
-        // bytecode generation in the subclass, avoiding the if instanceof
         final Object value = getValue( workingMemory,
                                        object );
 
-        if ( value instanceof Number ) {
+        if( value instanceof Character ) {
+            return (short) ((Character) value).charValue();
+        } else if ( value instanceof Number ) {
             return ((Number) value).shortValue();
-        } else if ( value instanceof Date ) {
-            return (short) ((Date) value).getTime();
         }
-        throw new RuntimeDroolsException( "Conversion to short not supported from " + value.getClass().getName() );
+
+        throw new RuntimeDroolsException( "Conversion to short not supported from " +  getExtractToClass().getName() );
     }
 
     public boolean isNullValue(InternalWorkingMemory workingMemory,

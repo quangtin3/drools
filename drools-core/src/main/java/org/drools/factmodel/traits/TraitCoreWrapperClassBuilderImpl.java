@@ -28,6 +28,7 @@ import java.io.ObjectOutput;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.util.BitSet;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
@@ -54,7 +55,7 @@ public class TraitCoreWrapperClassBuilderImpl implements TraitCoreWrapperClassBu
         String coreName = coreKlazz.getName();
         String wrapperName = coreName + "Wrapper";
 
-        ClassWriter cw = new ClassWriter(0);
+        ClassWriter cw = new ClassWriter( ClassWriter.COMPUTE_MAXS );
         FieldVisitor fv;
         MethodVisitor mv;
 
@@ -81,164 +82,275 @@ public class TraitCoreWrapperClassBuilderImpl implements TraitCoreWrapperClassBu
         {
             mv = cw.visitMethod( ACC_PUBLIC, "<init>", "()V", null, null );
             mv.visitCode();
+
             mv.visitVarInsn( ALOAD, 0 );
             mv.visitMethodInsn( INVOKESPECIAL, BuildUtils.getInternalType( coreName ), "<init>", "()V" );
-            mv.visitVarInsn( ALOAD, 0 );
-            mv.visitTypeInsn( NEW, Type.getInternalName( HashMap.class ) );
-            mv.visitInsn( DUP );
-            mv.visitMethodInsn( INVOKESPECIAL, Type.getInternalName( HashMap.class ), "<init>", "()V" );
-            mv.visitFieldInsn( PUTFIELD,
-                    BuildUtils.getInternalType( wrapperName ),
-                    TraitableBean.MAP_FIELD_NAME,
-                    Type.getDescriptor( Map.class ) );
-            mv.visitVarInsn( ALOAD, 0 );
-            mv.visitTypeInsn( NEW, Type.getInternalName( HashMap.class ) );
-            mv.visitInsn( DUP );
-            mv.visitMethodInsn( INVOKESPECIAL, Type.getInternalName( HashMap.class ), "<init>", "()V" );
-            mv.visitFieldInsn( PUTFIELD,
-                    BuildUtils.getInternalType( wrapperName ),
-                    TraitableBean.TRAITSET_FIELD_NAME,
-                    Type.getDescriptor( Map.class ) );
-            mv.visitInsn( RETURN );
-            mv.visitMaxs( 3, 1 );
-            mv.visitEnd();
-        }
-        {
-            mv = cw.visitMethod( ACC_PUBLIC, "getCore", "()" + Type.getDescriptor( Object.class ), "()"+BuildUtils.getTypeDescriptor( coreName ), null );
-            mv.visitCode();
-            mv.visitVarInsn( ALOAD, 0 );
-            mv.visitFieldInsn( GETFIELD,
-                    BuildUtils.getInternalType( wrapperName ),
-                    "core",
-                    BuildUtils.getTypeDescriptor( coreName ));
-            mv.visitInsn( ARETURN );
-            mv.visitMaxs( 1, 1 );
-            mv.visitEnd();
-        }
-        {
-            mv = cw.visitMethod( ACC_PUBLIC, "getDynamicProperties", "()" + Type.getDescriptor( Map.class ), "()Ljava/util/Map<Ljava/lang/String;Ljava/lang/Object;>;", null);
-            mv.visitCode();
-            mv.visitVarInsn( ALOAD, 0 );
-            mv.visitFieldInsn( GETFIELD,
-                    BuildUtils.getInternalType( wrapperName ),
-                    TraitableBean.MAP_FIELD_NAME,
-                    Type.getDescriptor( Map.class ) );
-            mv.visitInsn( ARETURN );
-            mv.visitMaxs( 1, 1 );
-            mv.visitEnd();
 
-            mv = cw.visitMethod( ACC_PUBLIC,
-                    "setDynamicProperties",
-                    "(" + Type.getDescriptor( Map.class ) + ")V",
-                    "(Ljava/util/Map<Ljava/lang/String;Ljava/lang/Object;>;)V",
-                    null );
-            mv.visitCode();
-            mv.visitVarInsn( ALOAD, 0 );
-            mv.visitVarInsn( ALOAD, 1 );
-            mv.visitFieldInsn( PUTFIELD, BuildUtils.getInternalType( wrapperName ), TraitableBean.MAP_FIELD_NAME, Type.getDescriptor( Map.class ) );
+//            mv.visitVarInsn( ALOAD, 0 );
+//            mv.visitTypeInsn( NEW, Type.getInternalName( HashMap.class ) );
+//            mv.visitInsn( DUP );
+//            mv.visitMethodInsn( INVOKESPECIAL, Type.getInternalName( HashMap.class ), "<init>", "()V" );
+//            mv.visitFieldInsn( PUTFIELD,
+//                    BuildUtils.getInternalType( wrapperName ),
+//                    TraitableBean.MAP_FIELD_NAME,
+//                    Type.getDescriptor( Map.class ) );
+
+//            mv.visitVarInsn( ALOAD, 0 );
+//            mv.visitTypeInsn( NEW, Type.getInternalName( VetoableTypedMap.class ) );
+//            mv.visitInsn( DUP );
+//            mv.visitTypeInsn( NEW, Type.getInternalName( HashMap.class ) );
+//            mv.visitInsn( DUP );
+//            mv.visitMethodInsn( INVOKESPECIAL, Type.getInternalName( HashMap.class ), "<init>", "()V" );
+//            mv.visitMethodInsn( INVOKESPECIAL, Type.getInternalName( VetoableTypedMap.class ), "<init>", "(" + Type.getDescriptor( Map.class ) + ")V" );
+//            mv.visitFieldInsn( PUTFIELD,
+//                    BuildUtils.getInternalType( wrapperName ),
+//                    TraitableBean.TRAITSET_FIELD_NAME,
+//                    Type.getDescriptor( Map.class ) );
+
             mv.visitInsn( RETURN );
-            mv.visitMaxs( 2, 2 );
+            mv.visitMaxs( 0, 0 );
             mv.visitEnd();
         }
-        {
-            mv = cw.visitMethod( ACC_PUBLIC, "getTraitMap", "()" + Type.getDescriptor( Map.class ),
-                                 "()Ljava/util/Map<Ljava/lang/String;Lorg/drools/factmodel/traits/Thing;>;", null );
-            mv.visitCode();
-            mv.visitVarInsn( ALOAD, 0 );
-            mv.visitFieldInsn( GETFIELD, BuildUtils.getInternalType( wrapperName ), TraitableBean.TRAITSET_FIELD_NAME, Type.getDescriptor( Map.class ) );
-            Label l0 = new Label();
-            mv.visitJumpInsn( IFNONNULL, l0 );
-            mv.visitVarInsn( ALOAD, 0 );
-            mv.visitTypeInsn( NEW, Type.getInternalName( HashMap.class ) );
-            mv.visitInsn( DUP );
-            mv.visitMethodInsn( INVOKESPECIAL, Type.getInternalName( HashMap.class ), "<init>", "()V" );
-            mv.visitFieldInsn( PUTFIELD, BuildUtils.getInternalType( wrapperName ), TraitableBean.TRAITSET_FIELD_NAME, Type.getDescriptor( Map.class ) );
-            mv.visitLabel( l0 );
-            mv.visitVarInsn( ALOAD, 0 );
-            mv.visitFieldInsn( GETFIELD, BuildUtils.getInternalType( wrapperName ), TraitableBean.TRAITSET_FIELD_NAME, Type.getDescriptor( Map.class ) );
-            mv.visitInsn( ARETURN );
-            mv.visitMaxs( 3, 1 );
-            mv.visitEnd();
+        if ( coreKlazz == null || needsMethod( coreKlazz, "getCore" ) ) {
+            {
+                mv = cw.visitMethod( ACC_PUBLIC, "getCore", "()" + Type.getDescriptor( Object.class ), "()"+BuildUtils.getTypeDescriptor( coreName ), null );
+                mv.visitCode();
+                mv.visitVarInsn( ALOAD, 0 );
+                mv.visitFieldInsn( GETFIELD,
+                        BuildUtils.getInternalType( wrapperName ),
+                        "core",
+                        BuildUtils.getTypeDescriptor( coreName ));
+                mv.visitInsn( ARETURN );
+                mv.visitMaxs( 0, 0 );
+                mv.visitEnd();
+            }
         }
-        {
-            mv = cw.visitMethod( ACC_PUBLIC, "setTraitMap", "(Ljava/util/Map;)V", null, null );
-            mv.visitCode();
-            mv.visitVarInsn( ALOAD, 0 );
-            mv.visitVarInsn( ALOAD, 1 );
-            mv.visitFieldInsn( PUTFIELD, BuildUtils.getInternalType( wrapperName ), TraitableBean.TRAITSET_FIELD_NAME, Type.getDescriptor( Map.class ) );
-            mv.visitInsn( RETURN );
-            mv.visitMaxs( 2, 2 );
-            mv.visitEnd();
+        if ( coreKlazz == null || needsMethod( coreKlazz, "_getDynamicProperties" ) ) {
+            {
+                mv = cw.visitMethod( ACC_PUBLIC, "_getDynamicProperties", "()" + Type.getDescriptor( Map.class ), "()Ljava/util/Map<Ljava/lang/String;Ljava/lang/Object;>;", null);
+                mv.visitCode();
+                mv.visitVarInsn( ALOAD, 0 );
+                mv.visitFieldInsn( GETFIELD,
+                        BuildUtils.getInternalType( wrapperName ),
+                        TraitableBean.MAP_FIELD_NAME,
+                        Type.getDescriptor( Map.class ) );
+                mv.visitInsn( ARETURN );
+                mv.visitMaxs( 0, 0 );
+                mv.visitEnd();
+
+                mv = cw.visitMethod( ACC_PUBLIC,
+                        "_setDynamicProperties",
+                        "(" + Type.getDescriptor( Map.class ) + ")V",
+                        "(Ljava/util/Map<Ljava/lang/String;Ljava/lang/Object;>;)V",
+                        null );
+                mv.visitCode();
+                mv.visitVarInsn( ALOAD, 0 );
+                mv.visitVarInsn( ALOAD, 1 );
+                mv.visitFieldInsn( PUTFIELD, BuildUtils.getInternalType( wrapperName ), TraitableBean.MAP_FIELD_NAME, Type.getDescriptor( Map.class ) );
+                mv.visitInsn( RETURN );
+                mv.visitMaxs( 0, 0 );
+                mv.visitEnd();
+            }
         }
-        {
-            mv = cw.visitMethod( ACC_PUBLIC, "addTrait",
-                                "(" + Type.getDescriptor( String.class ) + Type.getDescriptor( Thing.class ) + ")V",
-                                "(" + Type.getDescriptor( String.class ) + Type.getDescriptor( Thing.class ) + ")V",
-                                null);
-            mv.visitCode();
-            mv.visitVarInsn( ALOAD, 0 );
-            mv.visitMethodInsn( INVOKEVIRTUAL, BuildUtils.getInternalType( wrapperName ), "getTraitMap", "()" + Type.getDescriptor( Map.class ) );
-            mv.visitVarInsn( ALOAD, 1 );
-            mv.visitVarInsn( ALOAD, 2 );
-            mv.visitMethodInsn( INVOKEINTERFACE, Type.getInternalName( Map.class ), "put",
-                                "(" + Type.getDescriptor( Object.class ) + Type.getDescriptor( Object.class ) + ")" + Type.getDescriptor( Object.class ) );
-            mv.visitInsn( POP );
-            mv.visitInsn( RETURN );
-            mv.visitMaxs( 3, 3 );
-            mv.visitEnd();
+        if ( coreKlazz == null || needsMethod( coreKlazz, "_getTraitMap" ) ) {
+            {
+                mv = cw.visitMethod( ACC_PUBLIC, "_getTraitMap", "()" + Type.getDescriptor( Map.class ),
+                        "()Ljava/util/Map<Ljava/lang/String;Lorg/drools/factmodel/traits/Thing;>;", null );
+                mv.visitCode();
+                mv.visitVarInsn( ALOAD, 0 );
+                mv.visitFieldInsn( GETFIELD, BuildUtils.getInternalType( wrapperName ), TraitableBean.TRAITSET_FIELD_NAME, Type.getDescriptor( Map.class ) );
+                Label l0 = new Label();
+                mv.visitJumpInsn( IFNONNULL, l0 );
+                mv.visitVarInsn( ALOAD, 0 );
+                mv.visitTypeInsn( NEW, Type.getInternalName( TraitTypeMap.class ) );
+                mv.visitInsn( DUP );
+                mv.visitTypeInsn( NEW, Type.getInternalName( HashMap.class ) );
+                mv.visitInsn( DUP );
+                mv.visitMethodInsn( INVOKESPECIAL, Type.getInternalName( HashMap.class ), "<init>", "()V" );
+                mv.visitMethodInsn( INVOKESPECIAL, Type.getInternalName( TraitTypeMap.class ), "<init>", "(" + Type.getDescriptor( Map.class ) + ")V" );
+                mv.visitFieldInsn( PUTFIELD, BuildUtils.getInternalType( wrapperName ), TraitableBean.TRAITSET_FIELD_NAME, Type.getDescriptor( Map.class ) );
+                mv.visitLabel( l0 );
+                mv.visitVarInsn( ALOAD, 0 );
+                mv.visitFieldInsn( GETFIELD, BuildUtils.getInternalType( wrapperName ), TraitableBean.TRAITSET_FIELD_NAME, Type.getDescriptor( Map.class ) );
+                mv.visitInsn( ARETURN );
+                mv.visitMaxs( 0, 0 );
+                mv.visitEnd();
+            }
         }
-        {
-            mv = cw.visitMethod( ACC_PUBLIC, "getTrait",
-                                "(" + Type.getDescriptor( String.class ) + ")" + Type.getDescriptor( Thing.class ),
-                                "(" + Type.getDescriptor( String.class ) + ")" + Type.getDescriptor( Thing.class ), 
-                                null );
-            mv.visitCode();
-            mv.visitVarInsn(ALOAD, 0);
-            mv.visitMethodInsn(INVOKEVIRTUAL, BuildUtils.getInternalType(wrapperName), "getTraitMap", "()" + Type.getDescriptor(Map.class));
-            mv.visitVarInsn(ALOAD, 1);
-            mv.visitMethodInsn(INVOKEINTERFACE, Type.getInternalName(Map.class), "get",
-                    "(" + Type.getDescriptor(Object.class) + ")" + Type.getDescriptor(Object.class));
-            mv.visitTypeInsn(CHECKCAST, Type.getInternalName(Thing.class));
-            mv.visitInsn( ARETURN );
-            mv.visitMaxs( 2, 2 );
-            mv.visitEnd();
+        if ( coreKlazz == null || needsMethod( coreKlazz, "setTraitMap", Map.class ) ) {
+            {
+                mv = cw.visitMethod( ACC_PUBLIC, "setTraitMap", "(Ljava/util/Map;)V", null, null );
+                mv.visitCode();
+                mv.visitVarInsn( ALOAD, 0 );
+                mv.visitTypeInsn( NEW, Type.getInternalName( TraitTypeMap.class ) );
+                mv.visitInsn( DUP );
+                mv.visitVarInsn( ALOAD, 1 );
+                mv.visitMethodInsn( INVOKESPECIAL, Type.getInternalName( TraitTypeMap.class ), "<init>", "(" + Type.getDescriptor( Map.class ) + ")V" );
+                mv.visitFieldInsn( PUTFIELD, BuildUtils.getInternalType( wrapperName ), TraitableBean.TRAITSET_FIELD_NAME, Type.getDescriptor( Map.class ) );
+                mv.visitInsn( RETURN );
+                mv.visitMaxs( 0, 0 );
+                mv.visitEnd();
+            }
         }
-        {
-            mv = cw.visitMethod( ACC_PUBLIC, "hasTrait", "(" + Type.getDescriptor( String.class )+ ")Z", null, null );
-            mv.visitCode();
-            mv.visitVarInsn( ALOAD, 0 );
-            mv.visitMethodInsn( INVOKEVIRTUAL, BuildUtils.getInternalType( wrapperName ), "getTraitMap", "()" + Type.getDescriptor( Map.class ) );
-            mv.visitVarInsn( ALOAD, 1 );
-            mv.visitMethodInsn( INVOKEINTERFACE, Type.getInternalName( Map.class ), "containsKey", "(" + Type.getDescriptor( Object.class ) + ")Z" );
-            mv.visitInsn( IRETURN );
-            mv.visitMaxs( 2, 2 );
-            mv.visitEnd();
+        if ( coreKlazz == null || needsMethod( coreKlazz, "addTrait", String.class, Thing.class ) ) {
+            {
+                mv = cw.visitMethod( ACC_PUBLIC, "addTrait",
+                        "(" + Type.getDescriptor( String.class ) + Type.getDescriptor( Thing.class ) + ")V",
+                        "(" + Type.getDescriptor( String.class ) + Type.getDescriptor( Thing.class ) + ")V",
+                        null);
+                mv.visitCode();
+                mv.visitVarInsn( ALOAD, 0 );
+                mv.visitMethodInsn( INVOKEVIRTUAL, BuildUtils.getInternalType( wrapperName ), "_getTraitMap", "()" + Type.getDescriptor( Map.class ) );
+                mv.visitTypeInsn( CHECKCAST, Type.getInternalName( TraitTypeMap.class ) );
+                mv.visitVarInsn( ALOAD, 1 );
+                mv.visitVarInsn( ALOAD, 2 );
+                mv.visitMethodInsn( INVOKEVIRTUAL, Type.getInternalName( TraitTypeMap.class ), "putSafe",
+                        "(" + Type.getDescriptor( String.class ) + Type.getDescriptor( Thing.class ) + ")" + Type.getDescriptor( Thing.class ) );
+                mv.visitInsn( POP );
+                mv.visitInsn( RETURN );
+                mv.visitMaxs( 0, 0 );
+                mv.visitEnd();
+            }
         }
-        {
-            mv = cw.visitMethod( ACC_PUBLIC, "removeTrait", 
-                                "(" + Type.getDescriptor( String.class ) + ")" + Type.getDescriptor( Thing.class ),
-                                "(" + Type.getDescriptor( String.class ) + ")" + Type.getDescriptor( Thing.class ), 
-                                null );
-            mv.visitCode();
-            mv.visitVarInsn( ALOAD, 0 );
-            mv.visitMethodInsn( INVOKEVIRTUAL, BuildUtils.getInternalType( wrapperName ), "getTraitMap", "()" + Type.getDescriptor( Map.class ) );
-            mv.visitVarInsn( ALOAD, 1 );
-            mv.visitMethodInsn( INVOKEINTERFACE, Type.getInternalName( Map.class ), "remove", "(" + Type.getDescriptor( Object.class ) + ")" + Type.getDescriptor( Object.class ) );
-            mv.visitTypeInsn( CHECKCAST, Type.getInternalName( Thing.class ) );
-            mv.visitInsn( ARETURN );
-            mv.visitMaxs( 2, 2 );
-            mv.visitEnd();
+        if ( coreKlazz == null || needsMethod( coreKlazz, "getTrait", String.class ) ) {
+            {
+                mv = cw.visitMethod( ACC_PUBLIC, "getTrait",
+                        "(" + Type.getDescriptor( String.class ) + ")" + Type.getDescriptor( Thing.class ),
+                        "(" + Type.getDescriptor( String.class ) + ")" + Type.getDescriptor( Thing.class ),
+                        null );
+                mv.visitCode();
+                mv.visitVarInsn(ALOAD, 0);
+                mv.visitMethodInsn(INVOKEVIRTUAL, BuildUtils.getInternalType(wrapperName), "_getTraitMap", "()" + Type.getDescriptor(Map.class));
+                mv.visitVarInsn(ALOAD, 1);
+                mv.visitMethodInsn(INVOKEINTERFACE, Type.getInternalName(Map.class), "get",
+                        "(" + Type.getDescriptor(Object.class) + ")" + Type.getDescriptor(Object.class));
+                mv.visitTypeInsn(CHECKCAST, Type.getInternalName(Thing.class));
+                mv.visitInsn( ARETURN );
+                mv.visitMaxs( 0, 0 );
+                mv.visitEnd();
+            }
         }
-        {
-            mv = cw.visitMethod( ACC_PUBLIC, "getTraits", "()" + Type.getDescriptor( Collection.class ), "()Ljava/util/Collection<Ljava/lang/String;>;", null );
-            mv.visitCode();
-            mv.visitVarInsn( ALOAD, 0 );
-            mv.visitMethodInsn( INVOKEVIRTUAL, BuildUtils.getInternalType( wrapperName ), "getTraitMap", "()" + Type.getDescriptor( Map.class ) );
-            mv.visitMethodInsn( INVOKEINTERFACE, Type.getInternalName( Map.class ), "keySet", "()" + Type.getDescriptor( Set.class ) );
-            mv.visitInsn( ARETURN );
-            mv.visitMaxs( 1, 1 );
-            mv.visitEnd();
+        if ( coreKlazz == null || needsMethod( coreKlazz, "hasTrait", String.class ) ) {
+            {
+                mv = cw.visitMethod( ACC_PUBLIC, "hasTrait", "(" + Type.getDescriptor( String.class )+ ")Z", null, null );
+                mv.visitCode();
+                mv.visitVarInsn( ALOAD, 0 );
+                mv.visitMethodInsn( INVOKEVIRTUAL, BuildUtils.getInternalType( wrapperName ), "_getTraitMap", "()" + Type.getDescriptor( Map.class ) );
+                mv.visitVarInsn( ALOAD, 1 );
+                mv.visitMethodInsn( INVOKEINTERFACE, Type.getInternalName( Map.class ), "containsKey", "(" + Type.getDescriptor( Object.class ) + ")Z" );
+                mv.visitInsn( IRETURN );
+                mv.visitMaxs( 0, 0 );
+                mv.visitEnd();
+            }
         }
+        if ( coreKlazz == null || needsMethod( coreKlazz, "removeTrait", String.class ) ) {
+            {
+                mv = cw.visitMethod( ACC_PUBLIC, "removeTrait",
+                        Type.getMethodDescriptor( Type.getType( Collection.class ), new Type[] { Type.getType( String.class ) } ),
+                        Type.getMethodDescriptor( Type.getType( Collection.class ), new Type[] { Type.getType( String.class ) } ),
+                        null );
+                mv.visitCode();
+                mv.visitVarInsn( ALOAD, 0 );
+                mv.visitMethodInsn( INVOKEVIRTUAL, BuildUtils.getInternalType( wrapperName ), "_getTraitMap", Type.getMethodDescriptor( Type.getType( Map.class ), new Type[] {} ) );
+                mv.visitTypeInsn( CHECKCAST, Type.getInternalName( TraitTypeMap.class ) );
+                mv.visitVarInsn(ALOAD, 1);
+                mv.visitMethodInsn( INVOKEVIRTUAL, Type.getInternalName( TraitTypeMap.class ), "removeCascade",
+                        Type.getMethodDescriptor( Type.getType( Collection.class ), new Type[] { Type.getType( String.class )} ) );
+                mv.visitInsn( ARETURN );
+                mv.visitMaxs( 0, 0 );
+                mv.visitEnd();
+
+                mv = cw.visitMethod( ACC_PUBLIC, "removeTrait",
+                        Type.getMethodDescriptor( Type.getType( Collection.class ), new Type[] { Type.getType( BitSet.class ) } ),
+                        Type.getMethodDescriptor( Type.getType( Collection.class ), new Type[] { Type.getType( BitSet.class ) } ),
+                        null );
+                mv.visitCode();
+                mv.visitVarInsn( ALOAD, 0 );
+                mv.visitMethodInsn( INVOKEVIRTUAL, BuildUtils.getInternalType( wrapperName ), "_getTraitMap", Type.getMethodDescriptor( Type.getType( Map.class ), new Type[] {} ) );
+                mv.visitTypeInsn( CHECKCAST, Type.getInternalName( TraitTypeMap.class ) );
+                mv.visitVarInsn(ALOAD, 1);
+                mv.visitMethodInsn( INVOKEVIRTUAL, Type.getInternalName( TraitTypeMap.class ), "removeCascade",
+                        Type.getMethodDescriptor( Type.getType( Collection.class ), new Type[] { Type.getType( BitSet.class )} ) );
+                mv.visitInsn( ARETURN );
+                mv.visitMaxs( 0, 0 );
+                mv.visitEnd();
+
+            }
+        }
+        if ( coreKlazz == null || needsMethod( coreKlazz, "getTraits" ) ) {
+            {
+                mv = cw.visitMethod( ACC_PUBLIC, "getTraits", "()" + Type.getDescriptor( Collection.class ), "()Ljava/util/Collection<Ljava/lang/String;>;", null );
+                mv.visitCode();
+                mv.visitVarInsn( ALOAD, 0 );
+                mv.visitMethodInsn( INVOKEVIRTUAL, BuildUtils.getInternalType( wrapperName ), "_getTraitMap", "()" + Type.getDescriptor( Map.class ) );
+                mv.visitMethodInsn( INVOKEINTERFACE, Type.getInternalName( Map.class ), "keySet", "()" + Type.getDescriptor( Set.class ) );
+                mv.visitInsn( ARETURN );
+                mv.visitMaxs( 0, 0 );
+                mv.visitEnd();
+            }
+        }
+        if ( coreKlazz == null || needsMethod( coreKlazz, "_setBottomTypeCode" ) ) {
+            {
+                mv = cw.visitMethod( ACC_PUBLIC, "_setBottomTypeCode", "(" + Type.getDescriptor( BitSet.class )+ ")V", null, null );
+                mv.visitCode();
+                mv.visitVarInsn( ALOAD, 0 );
+                mv.visitFieldInsn( GETFIELD, BuildUtils.getInternalType( wrapperName ), TraitableBean.TRAITSET_FIELD_NAME , Type.getDescriptor( Map.class ) );
+                mv.visitTypeInsn( CHECKCAST, Type.getInternalName( TraitTypeMap.class ) );
+                mv.visitVarInsn( ALOAD, 1 );
+                mv.visitMethodInsn( INVOKEVIRTUAL, Type.getInternalName( TraitTypeMap.class ), "setBottomCode", "(" + Type.getDescriptor( BitSet.class ) + ")V");
+                mv.visitInsn( RETURN );
+                mv.visitMaxs( 0,0 );
+                mv.visitEnd();
+            }
+        }
+
+        if ( coreKlazz == null || needsMethod( coreKlazz, "getCurrentTypeCode" ) ) {
+
+            {
+                mv = cw.visitMethod( ACC_PUBLIC, "getCurrentTypeCode", "()" + Type.getDescriptor( BitSet.class ), null, null );
+                mv.visitCode();
+                mv.visitVarInsn( ALOAD, 0 );
+                mv.visitFieldInsn( GETFIELD,
+                        BuildUtils.getInternalType( wrapperName ),
+                        TraitableBean.TRAITSET_FIELD_NAME,
+                        Type.getDescriptor( Map.class ) );
+                mv.visitTypeInsn( CHECKCAST,
+                        Type.getInternalName( TraitTypeMap.class ) );
+                mv.visitMethodInsn( INVOKEVIRTUAL,
+                        Type.getInternalName( TraitTypeMap.class ),
+                        "getCurrentTypeCode",
+                        "()" + Type.getDescriptor( BitSet.class ) );
+                mv.visitInsn( ARETURN );
+                mv.visitMaxs( 0, 0 );
+                mv.visitEnd();
+            }
+        }
+
+        if ( coreKlazz == null || needsMethod( coreKlazz, "getMostSpecificTraits" ) ) {
+
+            {
+                mv = cw.visitMethod( ACC_PUBLIC,
+                        "getMostSpecificTraits",
+                        "()" + Type.getDescriptor( Collection.class ),
+                        "()Ljava/util/Collection<Lorg/drools/factmodel/traits/Thing;>;",
+                        null );
+                mv.visitCode();
+                mv.visitVarInsn( ALOAD, 0 );
+                mv.visitFieldInsn( GETFIELD, BuildUtils.getInternalType( wrapperName ),
+                        TraitableBean.TRAITSET_FIELD_NAME ,
+                        Type.getDescriptor( Map.class ) );
+                mv.visitTypeInsn( CHECKCAST, Type.getInternalName( TraitTypeMap.class ) );
+                mv.visitMethodInsn( INVOKEVIRTUAL,
+                        Type.getInternalName( TraitTypeMap.class ),
+                        "getMostSpecificTraits",
+                        "()" + Type.getDescriptor( Collection.class ) );
+                mv.visitInsn( ARETURN );
+                mv.visitMaxs( 0, 0 );
+                mv.visitEnd();
+
+            }
+        }
+
 
         {
             mv = cw.visitMethod( ACC_PUBLIC, "writeExternal", "(" + Type.getDescriptor( ObjectOutput.class ) + ")V", null, new String[] { Type.getInternalName( IOException.class ) } );
@@ -261,12 +373,12 @@ public class TraitCoreWrapperClassBuilderImpl implements TraitCoreWrapperClassBu
             mv.visitMethodInsn( INVOKEINTERFACE, Type.getInternalName( ObjectOutput.class ), "writeObject", "(" + Type.getDescriptor( Object.class ) + ")V" );
 
             mv.visitInsn( RETURN );
-            mv.visitMaxs( 2, 2 );
+            mv.visitMaxs( 0, 0 );
             mv.visitEnd();
         }
         {
-            mv = cw.visitMethod( ACC_PUBLIC, "readExternal", "(" + Type.getDescriptor( ObjectInput.class ) + ")V", null, 
-                                new String[] { Type.getInternalName( IOException.class ), Type.getInternalName( ClassNotFoundException.class ) } );
+            mv = cw.visitMethod( ACC_PUBLIC, "readExternal", "(" + Type.getDescriptor( ObjectInput.class ) + ")V", null,
+                    new String[] { Type.getInternalName( IOException.class ), Type.getInternalName( ClassNotFoundException.class ) } );
             mv.visitCode();
 
             mv.visitVarInsn( ALOAD, 0 );
@@ -288,7 +400,7 @@ public class TraitCoreWrapperClassBuilderImpl implements TraitCoreWrapperClassBu
             mv.visitFieldInsn( PUTFIELD, BuildUtils.getInternalType( wrapperName ), TraitableBean.TRAITSET_FIELD_NAME, Type.getDescriptor( Map.class ) );
 
             mv.visitInsn( RETURN );
-            mv.visitMaxs( 3, 2 );
+            mv.visitMaxs( 0, 0 );
             mv.visitEnd();
         }
 
@@ -302,7 +414,7 @@ public class TraitCoreWrapperClassBuilderImpl implements TraitCoreWrapperClassBu
                     "core",
                     BuildUtils.getTypeDescriptor( coreName ) );
             mv.visitInsn( RETURN );
-            mv.visitMaxs( 2, 2 );
+            mv.visitMaxs( 0, 0 );
             mv.visitEnd();
         }
 
@@ -334,7 +446,7 @@ public class TraitCoreWrapperClassBuilderImpl implements TraitCoreWrapperClassBu
 
                 mv.visitInsn( BuildUtils.returnType( method.getReturnType().getName() ) );
                 int stack = TraitFactory.getStackSize( method );
-                mv.visitMaxs( stack, stack );
+                mv.visitMaxs( 0, 0 );
                 mv.visitEnd();
             }
 
@@ -351,11 +463,20 @@ public class TraitCoreWrapperClassBuilderImpl implements TraitCoreWrapperClassBu
                     "init",
                     "(" + BuildUtils.getTypeDescriptor( coreName ) + ")V" );
             mv.visitInsn( RETURN );
-            mv.visitMaxs( 2, 2 );
+            mv.visitMaxs( 0, 0 );
             mv.visitEnd();
         }
+
         cw.visitEnd();
 
         return cw.toByteArray();
+    }
+
+    protected boolean needsMethod( Class coreKlazz, String methodName, Class... args ) {
+        try {
+            return coreKlazz.getMethod( methodName, args ) == null;
+        } catch ( NoSuchMethodException e ) {
+            return true;
+        }
     }
 }

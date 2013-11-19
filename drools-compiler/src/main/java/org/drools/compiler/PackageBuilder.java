@@ -16,35 +16,6 @@
 
 package org.drools.compiler;
 
-import static org.drools.core.util.BitMaskUtil.isSet;
-
-import java.beans.IntrospectionException;
-import java.io.Externalizable;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.Reader;
-import java.io.Serializable;
-import java.io.StringReader;
-import java.lang.reflect.Field;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
-import java.lang.reflect.Modifier;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.PriorityQueue;
-import java.util.Set;
-import java.util.Stack;
-
 import org.drools.ChangeSet;
 import org.drools.PackageIntegrationException;
 import org.drools.RuleBase;
@@ -88,7 +59,6 @@ import org.drools.factmodel.FieldDefinition;
 import org.drools.factmodel.traits.Thing;
 import org.drools.factmodel.traits.Trait;
 import org.drools.factmodel.traits.TraitFactory;
-import org.drools.factmodel.traits.TraitRegistry;
 import org.drools.factmodel.traits.Traitable;
 import org.drools.factmodel.traits.TraitableBean;
 import org.drools.facttemplates.FactTemplateImpl;
@@ -103,9 +73,9 @@ import org.drools.lang.descr.AbstractClassTypeDeclarationDescr;
 import org.drools.lang.descr.AnnotationDescr;
 import org.drools.lang.descr.AttributeDescr;
 import org.drools.lang.descr.BaseDescr;
+import org.drools.lang.descr.EntryPointDeclarationDescr;
 import org.drools.lang.descr.EnumDeclarationDescr;
 import org.drools.lang.descr.EnumLiteralDescr;
-import org.drools.lang.descr.EntryPointDeclarationDescr;
 import org.drools.lang.descr.FactTemplateDescr;
 import org.drools.lang.descr.FieldTemplateDescr;
 import org.drools.lang.descr.FunctionDescr;
@@ -114,6 +84,7 @@ import org.drools.lang.descr.GlobalDescr;
 import org.drools.lang.descr.ImportDescr;
 import org.drools.lang.descr.PackageDescr;
 import org.drools.lang.descr.PatternDescr;
+import org.drools.lang.descr.QualifiedName;
 import org.drools.lang.descr.RuleDescr;
 import org.drools.lang.descr.TypeDeclarationDescr;
 import org.drools.lang.descr.TypeFieldDescr;
@@ -121,7 +92,6 @@ import org.drools.lang.descr.WindowDeclarationDescr;
 import org.drools.lang.dsl.DSLMappingFile;
 import org.drools.lang.dsl.DSLTokenizedMappingFile;
 import org.drools.lang.dsl.DefaultExpander;
-import org.drools.lang.descr.QualifiedName;
 import org.drools.reteoo.ReteooRuleBase;
 import org.drools.rule.Function;
 import org.drools.rule.ImportDeclaration;
@@ -132,18 +102,51 @@ import org.drools.rule.Pattern;
 import org.drools.rule.Rule;
 import org.drools.rule.TypeDeclaration;
 import org.drools.rule.WindowDeclaration;
+import org.drools.rule.builder.PackageBuildContext;
 import org.drools.rule.builder.RuleBuildContext;
 import org.drools.rule.builder.RuleBuilder;
 import org.drools.rule.builder.RuleConditionBuilder;
 import org.drools.rule.builder.dialect.DialectError;
+import org.drools.rule.builder.dialect.mvel.MVELAnalysisResult;
+import org.drools.rule.builder.dialect.mvel.MVELDialect;
 import org.drools.runtime.pipeline.impl.DroolsJaxbHelperProviderImpl;
 import org.drools.runtime.rule.Activation;
 import org.drools.spi.InternalReadAccessor;
 import org.drools.type.DateFormats;
 import org.drools.type.DateFormatsImpl;
 import org.drools.util.CompositeClassLoader;
+import org.drools.util.HierarchySorter;
 import org.drools.xml.XmlChangeSetReader;
 import org.xml.sax.SAXException;
+
+import java.beans.IntrospectionException;
+import java.io.Externalizable;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.Reader;
+import java.io.Serializable;
+import java.io.StringReader;
+import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.PriorityQueue;
+import java.util.Set;
+import java.util.Stack;
+
+import static org.drools.core.util.BitMaskUtil.isSet;
 
 /**
  * This is the main compiler class for parsing and compiling rules and
@@ -215,11 +218,13 @@ public class PackageBuilder implements DeepCloneable<PackageBuilder> {
     private final Map<String, Map<String, AttributeDescr>> packageAttributes = new HashMap<String, Map<String, AttributeDescr>>();
 
     //PackageDescrs' list of ImportDescrs are kept identical as subsequent PackageDescrs are added.
-    private final Map<String, List<PackageDescr>>    packages          = new HashMap<String, List<PackageDescr>>();
+    private final Map<String, List<PackageDescr>>    packages           = new HashMap<String, List<PackageDescr>>();
 
-    private final Set<String>                        generatedTypes    = new HashSet<String>();
+    private final Set<String>                        generatedTypes     = new HashSet<String>();
 
-    private final Stack<List<Resource>>              buildResources    = new Stack<List<Resource>>();
+    private final Stack<List<Resource>>              buildResources     = new Stack<List<Resource>>();
+
+    private int                                      currentRulePackage = 0  ;
 
     /**
      * Use this when package is starting from scratch.
@@ -356,6 +361,7 @@ public class PackageBuilder implements DeepCloneable<PackageBuilder> {
             clone.packages.put(entry.getKey(), new ArrayList<PackageDescr>(entry.getValue()));
         }
         clone.packages.putAll(packages);
+        clone.currentRulePackage = currentRulePackage;
 
         return clone;
     }
@@ -364,18 +370,18 @@ public class PackageBuilder implements DeepCloneable<PackageBuilder> {
         TypeDeclaration colType = new TypeDeclaration( "Collection" );
         colType.setTypesafe( false );
         colType.setTypeClass( Collection.class );
-        builtinTypes.put( "java.util.Collection",
-                          colType );
+        builtinTypes.put("java.util.Collection",
+                colType);
 
         TypeDeclaration mapType = new TypeDeclaration( "Map" );
-        mapType.setTypesafe( false );
+        mapType.setTypesafe(false);
         mapType.setTypeClass( Map.class );
         builtinTypes.put( "java.util.Map",
                           mapType );
 
         TypeDeclaration activationType = new TypeDeclaration( "Activation" );
         activationType.setTypesafe( false );
-        activationType.setTypeClass( Activation.class );
+        activationType.setTypeClass(Activation.class);
         builtinTypes.put( Activation.class.getCanonicalName(),
                           activationType );
 
@@ -384,11 +390,6 @@ public class PackageBuilder implements DeepCloneable<PackageBuilder> {
         thingType.setTypeClass( Thing.class );
         builtinTypes.put( Thing.class.getCanonicalName(),
                           thingType );
-        ClassDefinition def = new ClassDefinition();
-        def.setClassName( thingType.getTypeClass().getName() );
-        def.setDefinedClass( Thing.class );
-        TraitRegistry.getInstance().addTrait( def );
-
     }
 
     private ProcessBuilder createProcessBuilder() {
@@ -515,7 +516,7 @@ public class PackageBuilder implements DeepCloneable<PackageBuilder> {
 
     PackageDescr xmlToPackageDescr(Resource resource) throws DroolsParserException, IOException {
         final XmlPackageReader xmlReader = new XmlPackageReader( this.configuration.getSemanticModules() );
-        xmlReader.getParser().setClassLoader( this.rootClassLoader );
+        xmlReader.getParser().setClassLoader(this.rootClassLoader);
 
         Reader reader = null;
         try {
@@ -739,11 +740,11 @@ public class PackageBuilder implements DeepCloneable<PackageBuilder> {
         }
     }
 
-    public void addPackageFromPMML(Resource resource, ResourceType type, ResourceConfiguration configuration) throws Exception, DroolsParserException {
+    public void addPackageFromPMML(Resource resource, ResourceType type, ResourceConfiguration configuration) throws Exception {
         PMMLCompiler compiler = getPMMLCompiler();
         if ( compiler != null ) {
             this.resource = resource;
-            addPackage( pmmlModelToPackageDescr( compiler, resource ) );
+            addPackage(pmmlModelToPackageDescr(compiler, resource));
             this.resource = null;
         } else {
             addPackageForExternalType( resource, type, configuration );
@@ -751,8 +752,8 @@ public class PackageBuilder implements DeepCloneable<PackageBuilder> {
     }
 
     PackageDescr pmmlModelToPackageDescr( PMMLCompiler compiler, Resource resource ) throws DroolsParserException, IOException {
-        String theory = compiler.compile( resource.getInputStream(),
-                getPackageRegistry() );
+        String theory = compiler.compile(resource.getInputStream(),
+                getPackageRegistry());
 
         DrlParser parser = new DrlParser();
         PackageDescr pkg = parser.parse( new StringReader( theory ) );
@@ -865,6 +866,8 @@ public class PackageBuilder implements DeepCloneable<PackageBuilder> {
             return;
         }
 
+        currentRulePackage = pkgRegistryMap.size() -1;
+
         // merge into existing package
         mergePackage(pkgRegistry, packageDescr);
 
@@ -903,9 +906,9 @@ public class PackageBuilder implements DeepCloneable<PackageBuilder> {
 
         //Derive namespace
         if (isEmpty( packageDescr.getNamespace() )) {
-            packageDescr.setNamespace( this.configuration.getDefaultPackageName() );
+            packageDescr.setNamespace(this.configuration.getDefaultPackageName());
         }
-        validateUniqueRuleNames( packageDescr );
+        validateUniqueRuleNames(packageDescr);
         if (!checkNamespace( packageDescr.getNamespace() )) {
             return null;
         }
@@ -952,6 +955,9 @@ public class PackageBuilder implements DeepCloneable<PackageBuilder> {
             }
         }
 
+        // ensure that rules are ordered by dependency, so that dependent rules are built later
+        sortRulesByDependency(packageDescr);
+
         // iterate and compile
         for (RuleDescr ruleDescr : packageDescr.getRules()) {
             if (isEmpty(ruleDescr.getNamespace())) {
@@ -960,15 +966,92 @@ public class PackageBuilder implements DeepCloneable<PackageBuilder> {
             }
 
             Map<String, AttributeDescr> pkgAttributes = packageAttributes.get(packageDescr.getNamespace());
-            inheritPackageAttributes(pkgAttributes,
-                    ruleDescr);
+            inheritPackageAttributes(pkgAttributes, ruleDescr);
 
             if (isEmpty(ruleDescr.getDialect())) {
-                ruleDescr.addAttribute(new AttributeDescr("dialect",
-                        pkgRegistry.getDialect()));
+                ruleDescr.addAttribute(new AttributeDescr("dialect", pkgRegistry.getDialect()));
             }
             addRule(ruleDescr);
         }
+    }
+
+    private void sortRulesByDependency( PackageDescr packageDescr ) {
+        // Using a topological sorting algorithm
+        // see http://en.wikipedia.org/wiki/Topological_sorting
+
+        PackageRegistry pkgRegistry = this.pkgRegistryMap.get( packageDescr.getNamespace() );
+        Package pkg = pkgRegistry.getPackage();
+
+        List<RuleDescr> roots = new LinkedList<RuleDescr>();
+        Map<String, List<RuleDescr>> parents = new HashMap<String, List<RuleDescr>>();
+        List<RuleDescr> sorted = new ArrayList<RuleDescr>();
+
+        for ( RuleDescr ruleDescr : packageDescr.getRules() ) {
+            if ( !ruleDescr.hasParent() ) {
+                roots.add(ruleDescr);
+            } else if ( pkg.getRule( ruleDescr.getParentName() ) != null ) {
+                // The parent of this rule has been already compiled
+                sorted.add(ruleDescr);
+            } else {
+                List<RuleDescr> children = parents.get(ruleDescr.getParentName());
+                if (children == null) {
+                    children = new ArrayList<RuleDescr>();
+                    parents.put(ruleDescr.getParentName(), children);
+                }
+                children.add(ruleDescr);
+            }
+        }
+
+        if ( parents.isEmpty() ) { // Sorting not necessary
+            return;
+        }
+
+        while ( !roots.isEmpty() ) {
+            RuleDescr root = roots.remove(0);
+            sorted.add(root);
+            List<RuleDescr> children = parents.remove(root.getName());
+            if ( children != null) {
+                roots.addAll(children);
+            }
+        }
+
+        reportHierarchyErrors(parents, sorted);
+
+        packageDescr.getRules().clear();
+        packageDescr.getRules().addAll( sorted );
+    }
+
+    private void reportHierarchyErrors(Map<String, List<RuleDescr>> parents, List<RuleDescr> sorted) {
+        boolean circularDep = false;
+        for ( List<RuleDescr> rds : parents.values() ) {
+            for ( RuleDescr ruleDescr : rds ) {
+                if (parents.get(ruleDescr.getParentName()) != null) {
+                    circularDep = true;
+                    results.add(new RuleBuildError(new Rule(ruleDescr.getName()), ruleDescr, null,
+                                "Circular dependency in rules hierarchy"));
+                    break;
+                }
+                manageUnresolvedExtension(ruleDescr, sorted);
+            }
+            if ( circularDep ) {
+                break;
+            }
+        }
+    }
+
+    private void manageUnresolvedExtension(RuleDescr ruleDescr, Collection<RuleDescr> candidates) {
+        List<String> candidateRules = new LinkedList<String>();
+        for ( RuleDescr r : candidates ) {
+            if ( StringUtils.stringSimilarity( ruleDescr.getParentName(), r.getName(), StringUtils.SIMILARITY_STRATS.DICE ) >= 0.75 ) {
+                candidateRules.add( r.getName() );
+            }
+        }
+        String msg = "Unresolved parent name " + ruleDescr.getParentName();
+        if ( candidateRules.size() > 0 ) {
+            msg += " >> did you mean any of :" + candidateRules;
+        }
+        results.add(new RuleBuildError(new Rule(ruleDescr.getName()), ruleDescr, msg,
+                    "Unable to resolve parent rule, please check that both rules are in the same package"));
     }
 
     private void initPackage(PackageDescr packageDescr) {
@@ -1281,8 +1364,13 @@ public class PackageBuilder implements DeepCloneable<PackageBuilder> {
 
         // need to reinsert this to ensure that the package is the first/last one in the ordered map
         // this feature is exploited by the knowledgeAgent
+        Package current = getPackage();
         this.pkgRegistryMap.remove( packageDescr.getName() );
         this.pkgRegistryMap.put( packageDescr.getName(), pkgRegistry );
+        if ( ! current.getName().equals( packageDescr.getName() ) ) {
+            currentRulePackage = pkgRegistryMap.size() - 1;
+        }
+
     }
 
     private void processGlobals(PackageRegistry pkgRegistry, PackageDescr packageDescr) {
@@ -1334,10 +1422,12 @@ public class PackageBuilder implements DeepCloneable<PackageBuilder> {
     }
 
     public TypeDeclaration getAndRegisterTypeDeclaration( Class<?> cls, String packageName ) {
-        if (cls.isPrimitive() || cls.isArray())
+        if (cls.isPrimitive() || cls.isArray()) {
             return null;
+        }
         TypeDeclaration typeDeclaration = getCachedTypeDeclaration( cls );
         if (typeDeclaration != null) {
+            registerTypeDeclaration( packageName, typeDeclaration );
             return typeDeclaration;
         }
         typeDeclaration = getExistingTypeDeclaration( cls );
@@ -1348,11 +1438,20 @@ public class PackageBuilder implements DeepCloneable<PackageBuilder> {
 
         typeDeclaration = createTypeDeclarationForBean( cls );
         initTypeDeclaration( cls, typeDeclaration );
-        PackageRegistry packageRegistry = pkgRegistryMap.get( packageName );
-        if (packageRegistry != null) {
-            packageRegistry.getPackage().addTypeDeclaration( typeDeclaration );
-        }
+        registerTypeDeclaration( packageName, typeDeclaration );
         return typeDeclaration;
+    }
+
+    private void registerTypeDeclaration(String packageName, TypeDeclaration typeDeclaration) {
+        if ( typeDeclaration.getNature() == TypeDeclaration.Nature.DECLARATION || packageName.equals(typeDeclaration.getTypeClass().getPackage().getName()) ) {
+            PackageRegistry packageRegistry = pkgRegistryMap.get( packageName );
+            if (packageRegistry != null) {
+                packageRegistry.getPackage().addTypeDeclaration( typeDeclaration );
+            } else {
+                newPackage( new PackageDescr( packageName, "" ) );
+                pkgRegistryMap.get( packageName ).getPackage().addTypeDeclaration( typeDeclaration );
+            }
+        }
     }
 
     public TypeDeclaration getTypeDeclaration( Class<?> cls ) {
@@ -1446,10 +1545,7 @@ public class PackageBuilder implements DeepCloneable<PackageBuilder> {
     }
 
     private TypeDeclaration createTypeDeclarationForBean( Class<?> cls ) {
-        String typeName = cls.getName();
-        int lastDot = typeName.lastIndexOf( '.' );
-        typeName = lastDot >= 0 ? typeName.substring( lastDot + 1 ) : typeName;
-        TypeDeclaration typeDeclaration = new TypeDeclaration( typeName );
+        TypeDeclaration typeDeclaration = new TypeDeclaration( cls.getSimpleName() );
         typeDeclaration.setTypeClass( cls );
 
         PropertySpecificOption propertySpecificOption = configuration.getOption(PropertySpecificOption.class);
@@ -1625,8 +1721,7 @@ public class PackageBuilder implements DeepCloneable<PackageBuilder> {
      * @param packageDescr
      *            the descriptor of the package the class is declared in
      */
-    private void fillSuperType( TypeDeclarationDescr typeDescr,
-            PackageDescr packageDescr ) {
+    private void fillSuperType( TypeDeclarationDescr typeDescr, PackageDescr packageDescr ) {
 
         for ( QualifiedName qname : typeDescr.getSuperTypes() ) {
             String declaredSuperType = qname.getFullName();
@@ -1640,6 +1735,8 @@ public class PackageBuilder implements DeepCloneable<PackageBuilder> {
                                         resolveType( declaredSuperType,
                                                      packageDescr,
                                                      this.pkgRegistryMap.get( typeDescr.getNamespace() ) );
+
+                    declaredSuperType = typeName2ClassName( declaredSuperType );
 
                     // sets supertype name and supertype package
                     separator = declaredSuperType.lastIndexOf( "." );
@@ -1656,6 +1753,29 @@ public class PackageBuilder implements DeepCloneable<PackageBuilder> {
                 }
             }
         }
+    }
+
+    private String typeName2ClassName( String type ) {
+        Class<?> cls = getClassForType( type );
+        return cls != null ? cls.getName() : type;
+    }
+
+    private Class<?> getClassForType( String type ) {
+        Class<?> cls = null;
+        String superType = type;
+        while (true) {
+            try {
+                cls = Class.forName( superType, true, this.rootClassLoader );
+                break;
+            } catch (ClassNotFoundException e) {
+            }
+            int separator = superType.lastIndexOf('.');
+            if (separator < 0) {
+                break;
+            }
+            superType = superType.substring(0, separator) + "$" + superType.substring(separator + 1);
+        }
+        return cls;
     }
 
     private void fillFieldTypes( AbstractClassTypeDeclarationDescr typeDescr,
@@ -1924,56 +2044,28 @@ public class PackageBuilder implements DeepCloneable<PackageBuilder> {
     List<TypeDefinition> processTypeDeclarations(PackageRegistry pkgRegistry, PackageDescr packageDescr) {
         for ( AbstractClassTypeDeclarationDescr typeDescr : packageDescr.getClassAndEnumDeclarationDescrs() ) {
 
-            if ( isEmpty( typeDescr.getNamespace() ) ) {
+            String qName = typeDescr.getType().getFullName();
+            Class typeClass = getClassForType(qName);
+            if (typeClass == null) {
+                typeClass = getClassForType(typeDescr.getTypeName());
+            }
+            if (typeClass == null) {
                 for ( ImportDescr id : packageDescr.getImports() ) {
                     String imp = id.getTarget();
                     int separator = imp.lastIndexOf( '.' );
                     String tail = imp.substring( separator + 1 );
                     if (tail.equals( typeDescr.getTypeName() )) {
-                        typeDescr.setNamespace( imp.substring( 0,
-                                                               separator ) );
+                        typeDescr.setNamespace( imp.substring( 0, separator ) );
+                        typeClass = getClassForType(typeDescr.getType().getFullName());
+                        break;
                     }
                 }
             }
-            String qName = typeDescr.getType().getFullName();
-
-            int dotPos = qName.lastIndexOf( '.' );
+            String className = typeClass != null ? typeClass.getName() : qName;
+            int dotPos = className.lastIndexOf( '.' );
             if (dotPos >= 0) {
-                // see if this overwrites an existing bean, which also could be a nested class.
-                Class cls = null;
-                try {
-                    cls = Class.forName( typeDescr.getTypeName(),
-                                         true,
-                                         this.rootClassLoader );
-                } catch (ClassNotFoundException e) {
-                }
-
-                String qualifiedClass = qName;
-                int lastIndex;
-                while (cls == null && ( lastIndex = qualifiedClass.lastIndexOf( '.' ) ) != -1) {
-                    try {
-
-                        qualifiedClass = qualifiedClass.substring( 0,
-                                                                   lastIndex ) + "$" +
-                                         qualifiedClass.substring( lastIndex + 1 );
-                        cls = Class.forName( qualifiedClass,
-                                             true,
-                                             this.rootClassLoader );
-                    } catch (final ClassNotFoundException e) {
-                        cls = null;
-                    }
-                }
-
-                if (cls != null) {
-                    String str = ClassUtils.getPackage( cls );
-                    typeDescr.setNamespace( str );
-                    dotPos = cls.getName().lastIndexOf( '.' ); // reget dotPos, incase there were nested classes
-                    typeDescr.setTypeName( cls.getName().substring( dotPos + 1 ) );
-                } else {
-                    typeDescr.setNamespace( qName.substring( 0,
-                                                             dotPos ) );
-                    typeDescr.setTypeName( qName.substring( dotPos + 1 ) );
-                }
+                typeDescr.setNamespace( className.substring( 0, dotPos ) );
+                typeDescr.setTypeName( className.substring( dotPos + 1 ) );
             }
 
             if ( isEmpty( typeDescr.getNamespace() ) && typeDescr.getFields().isEmpty() ) {
@@ -2177,11 +2269,30 @@ public class PackageBuilder implements DeepCloneable<PackageBuilder> {
         String timestamp = ( annotationDescr != null ) ? annotationDescr.getSingleValue() : null;
         if (timestamp != null) {
             type.setTimestampAttribute( timestamp );
-            Package pkg = pkgRegistry.getPackage();
+            Package pkg = pkgRegistry.getPackage();            
+
+            MVELDialect dialect = ( MVELDialect ) pkgRegistry.getDialectCompiletimeRegistry().getDialect( "mvel" );            
+            PackageBuildContext context = new PackageBuildContext();            
+            context.init( this, pkg, typeDescr, pkgRegistry.getDialectCompiletimeRegistry(), dialect, null );
+            if ( !type.isTypesafe() ) {
+                context.setTypesafe( false );
+            }
+            
+            MVELAnalysisResult results = ( MVELAnalysisResult )
+                                context.getDialect().analyzeExpression( context,
+                                                                        typeDescr,
+                                                                        timestamp,
+                                                                        new BoundIdentifiers( Collections.EMPTY_MAP,
+                                                                                              Collections.EMPTY_MAP,
+                                                                                              Collections.EMPTY_MAP,
+                                                                                              type.getTypeClass() ) );
+            
             InternalReadAccessor reader = pkg.getClassFieldAccessorStore().getMVELReader( ClassUtils.getPackage(type.getTypeClass()),
                                                                                           type.getTypeClass().getName(),
                                                                                           timestamp,
-                                                                                          type.isTypesafe() );
+                                                                                          type.isTypesafe(),
+                                                                                          results.getReturnType() );
+            
             MVELDialectRuntimeData data = (MVELDialectRuntimeData) pkg.getDialectRuntimeRegistry().getDialectData( "mvel" );
             data.addCompileable( (MVELCompileable) reader );
             ( (MVELCompileable) reader ).compile( data );
@@ -2193,14 +2304,40 @@ public class PackageBuilder implements DeepCloneable<PackageBuilder> {
         if (duration != null) {
             type.setDurationAttribute( duration );
             Package pkg = pkgRegistry.getPackage();
-            InternalReadAccessor reader = pkg.getClassFieldAccessorStore().getMVELReader( ClassUtils.getPackage( type.getTypeClass() ),
-                                                                                          type.getTypeClass().getName(),
-                                                                                          duration,
-                                                                                          type.isTypesafe() );
-            MVELDialectRuntimeData data = (MVELDialectRuntimeData) pkg.getDialectRuntimeRegistry().getDialectData( "mvel" );
-            data.addCompileable( (MVELCompileable) reader );
-            ( (MVELCompileable) reader ).compile( data );
-            type.setDurationExtractor( reader );
+            
+            MVELDialect dialect = ( MVELDialect ) pkgRegistry.getDialectCompiletimeRegistry().getDialect( "mvel" );            
+            PackageBuildContext context = new PackageBuildContext();            
+            context.init( this, pkg, typeDescr, pkgRegistry.getDialectCompiletimeRegistry(), dialect, null );
+            if ( !type.isTypesafe() ) {
+                context.setTypesafe( false );
+            }
+            
+            MVELAnalysisResult results = ( MVELAnalysisResult )
+                                context.getDialect().analyzeExpression( context,
+                                                                        typeDescr,
+                                                                        duration,
+                                                                        new BoundIdentifiers( Collections.EMPTY_MAP,
+                                                                                              Collections.EMPTY_MAP,
+                                                                                              Collections.EMPTY_MAP,
+                                                                                              type.getTypeClass() ) );            
+
+            if (results != null) {
+                InternalReadAccessor reader = pkg.getClassFieldAccessorStore().getMVELReader( ClassUtils.getPackage( type.getTypeClass() ),
+                                                                                              type.getTypeClass().getName(),
+                                                                                              duration,
+                                                                                              type.isTypesafe(),
+                                                                                              results.getReturnType()  );
+
+                MVELDialectRuntimeData data = (MVELDialectRuntimeData) pkg.getDialectRuntimeRegistry().getDialectData( "mvel" );
+                data.addCompileable( (MVELCompileable) reader );
+                ( (MVELCompileable) reader ).compile( data );
+                type.setDurationExtractor( reader );
+            } else {
+                this.results.add( new TypeDeclarationError(typeDescr,
+                        "Error processing @duration for TypeDeclaration '" + type.getFullName() +
+                        "': cannot access the field '" + duration + "'") );
+
+            }
         }
 
         annotationDescr = typeDescr.getAnnotation( TypeDeclaration.ATTR_EXPIRE );
@@ -2223,9 +2360,20 @@ public class PackageBuilder implements DeepCloneable<PackageBuilder> {
 
         if ( type.isValid() ) {
             // prefer definitions where possible
-            if ( type.getNature() == TypeDeclaration.Nature.DEFINITION
-                 || pkgRegistry.getPackage().getTypeDeclaration( type.getTypeName() ) == null ) {
+            if ( type.getNature() == TypeDeclaration.Nature.DEFINITION ) {
                 pkgRegistry.getPackage().addTypeDeclaration( type );
+            } else {
+                TypeDeclaration oldType = pkgRegistry.getPackage().getTypeDeclaration( type.getTypeName() );
+                if (oldType == null) {
+                    pkgRegistry.getPackage().addTypeDeclaration( type );
+                } else {
+                    if (type.getRole() == TypeDeclaration.Role.EVENT) {
+                        oldType.setRole(TypeDeclaration.Role.EVENT);
+                    }
+                    if (type.isPropertyReactive()) {
+                        oldType.setPropertyReactive(true);
+                    }
+                }
             }
         }
 
@@ -2249,10 +2397,10 @@ public class PackageBuilder implements DeepCloneable<PackageBuilder> {
             Map<String, Method> setters = inspector.getSetterMethods();
             int j = 0;
             for (String fieldName : methods.keySet()) {
-                if ("core".equals( fieldName ) || "fields".equals( fieldName )) {
+                if ( "core".equals( fieldName ) || "fields".equals( fieldName ) ) {
                     continue;
                 }
-                if (!inspector.isNonGetter( fieldName ) && setters.keySet().contains( fieldName )) {
+                if ( !inspector.isNonGetter( fieldName ) && setters.keySet().contains( fieldName ) ) {
 
                     Class ret = methods.get( fieldName ).getReturnType();
                     FieldDefinition field = new FieldDefinition();
@@ -2264,11 +2412,11 @@ public class PackageBuilder implements DeepCloneable<PackageBuilder> {
             }
 
             Set<String> interfaces = new HashSet<String>();
-            Collections.addAll(interfaces, type.getTypeClassDef().getInterfaces());
-            for (Class iKlass : concrete.getInterfaces()) {
+            Collections.addAll( interfaces, type.getTypeClassDef().getInterfaces() );
+            for ( Class iKlass : concrete.getInterfaces() ) {
                 interfaces.add( iKlass.getName() );
             }
-            type.getTypeClassDef().setInterfaces( interfaces.toArray( new String[interfaces.size()] ) );
+            type.getTypeClassDef().setInterfaces( interfaces.toArray( new String[ interfaces.size() ] ) );
 
         } catch (IOException e) {
             e.printStackTrace();
@@ -2438,6 +2586,8 @@ public class PackageBuilder implements DeepCloneable<PackageBuilder> {
                                                                 annotationName + ": " +
                                                                 nsme.getMessage() + ";" ) );
                 }
+            } else {
+                def.addMetaData( annotationName, typeDescr.getAnnotation( annotationName ).getSingleValue() );
             }
         }
 
@@ -2537,7 +2687,67 @@ public class PackageBuilder implements DeepCloneable<PackageBuilder> {
         generateDeclaredBean( typeDescr,
                               type,
                               pkgRegistry,
-                              def );
+                              expandImportsInFieldInitExpr( def, pkgRegistry ) );
+    }
+
+    private ClassDefinition expandImportsInFieldInitExpr(ClassDefinition def, PackageRegistry pkgRegistry) {
+        TypeResolver typeResolver = pkgRegistry.getPackage().getTypeResolver();
+        for (FieldDefinition field : def.getFieldsDefinitions()) {
+            field.setInitExpr(rewriteInitExprWithImports(field.getInitExpr(), typeResolver));
+        }
+        return def;
+    }
+
+    private String rewriteInitExprWithImports(String expr, TypeResolver typeResolver) {
+        if (expr == null) {
+            return null;
+        }
+        StringBuilder sb = new StringBuilder();
+        boolean inQuotes = false;
+        boolean inTypeName = false;
+        boolean afterDot = false;
+        int typeStart = 0;
+        for (int i = 0; i < expr.length(); i++) {
+            char ch = expr.charAt(i);
+            if (Character.isJavaIdentifierStart(ch)) {
+                if (!inTypeName && !inQuotes && !afterDot) {
+                    typeStart = i;
+                    inTypeName = true;
+                }
+            } else if (!Character.isJavaIdentifierPart(ch)) {
+                if (ch == '"') {
+                    inQuotes = !inQuotes;
+                } else if (ch == '.' && !inQuotes) {
+                    afterDot = true;
+                } else if (!Character.isSpaceChar(ch)) {
+                    afterDot = false;
+                }
+                if (inTypeName) {
+                    inTypeName = false;
+                    String type = expr.substring(typeStart, i);
+                    sb.append(getFullTypeName(type, typeResolver));
+                }
+            }
+            if (!inTypeName) {
+                sb.append(ch);
+            }
+        }
+        if (inTypeName) {
+            String type = expr.substring(typeStart);
+            sb.append(getFullTypeName(type, typeResolver));
+        }
+        return sb.toString();
+    }
+
+    private String getFullTypeName(String type, TypeResolver typeResolver) {
+        if (type.equals("new")) {
+            return type;
+        }
+        try {
+            return typeResolver.getFullTypeName(type);
+        } catch (ClassNotFoundException e) {
+            return type;
+        }
     }
 
     private void generateDeclaredBean( AbstractClassTypeDeclarationDescr typeDescr,
@@ -2546,7 +2756,10 @@ public class PackageBuilder implements DeepCloneable<PackageBuilder> {
                                        ClassDefinition def ) {
 
         if ( typeDescr.getAnnotation( Traitable.class.getSimpleName() ) != null
-                || ( ! type.getKind().equals( TypeDeclaration.Kind.TRAIT ) && TraitRegistry.getInstance().getTraitables().containsKey( def.getSuperClass() ) ) ) {
+                || ( ! type.getKind().equals( TypeDeclaration.Kind.TRAIT ) &&
+                        pkgRegistryMap.containsKey( def.getSuperClass() ) &&
+                        pkgRegistryMap.get( def.getSuperClass() ).getTraitRegistry().getTraitables().containsKey( def.getSuperClass() )
+                ) ) {
             if (!isNovelClass( typeDescr )) {
                 try {
                     PackageRegistry reg = this.pkgRegistryMap.get( typeDescr.getNamespace() );
@@ -2558,11 +2771,11 @@ public class PackageBuilder implements DeepCloneable<PackageBuilder> {
                     // we already know the class exists
                 }
             }
-            TraitRegistry.getInstance().addTraitable( def );
+            pkgRegistry.getTraitRegistry().addTraitable( def );
         } else if ( type.getKind().equals( TypeDeclaration.Kind.TRAIT )
                     || typeDescr.getAnnotation( Trait.class.getSimpleName() ) != null ) {
 
-            if ( !type.isNovel() ) {
+            if ( ! type.isNovel() ) {
                 try {
                     PackageRegistry reg = this.pkgRegistryMap.get( typeDescr.getNamespace() );
                     String availableName = typeDescr.getType().getFullName();
@@ -2617,18 +2830,18 @@ public class PackageBuilder implements DeepCloneable<PackageBuilder> {
                     } else {
                         updateTraitDefinition( type,
                                                resolvedType );
-                        TraitRegistry.getInstance().addTrait( def );
+                        pkgRegistry.getTraitRegistry().addTrait( def );
                     }
                 } catch (ClassNotFoundException cnfe) {
                     // we already know the class exists
                 }
             } else {
-                if (def.getClassName().endsWith( "_Trait__Extension" )) {
-                    TraitRegistry.getInstance().addTrait( def.getClassName().replace( "_Trait__Extension",
+                if ( def.getClassName().endsWith( TraitFactory.SUFFIX ) ) {
+                    pkgRegistry.getTraitRegistry().addTrait( def.getClassName().replace( TraitFactory.SUFFIX,
                                                                                       "" ),
                                                           def );
                 } else {
-                    TraitRegistry.getInstance().addTrait( def );
+                    pkgRegistry.getTraitRegistry().addTrait( def );
                 }
             }
 
@@ -2752,6 +2965,8 @@ public class PackageBuilder implements DeepCloneable<PackageBuilder> {
                                                                         "  - undefined property in @annotation " +
                                                                         annotationName + ": " + nsme.getMessage() + ";" ) );
                         }
+                    } else {
+                        fieldDef.addMetaData( annotationName, field.getAnnotation( annotationName ).getSingleValue() );
                     }
                 }
 
@@ -2862,7 +3077,7 @@ public class PackageBuilder implements DeepCloneable<PackageBuilder> {
     public Package getPackage() {
         PackageRegistry pkgRegistry = null;
         if (!this.pkgRegistryMap.isEmpty()) {
-            pkgRegistry = (PackageRegistry) this.pkgRegistryMap.values().toArray()[this.pkgRegistryMap.size() - 1];
+            pkgRegistry = (PackageRegistry) this.pkgRegistryMap.values().toArray()[ currentRulePackage ];
         }
         Package pkg = null;
         if (pkgRegistry != null) {
@@ -2876,7 +3091,6 @@ public class PackageBuilder implements DeepCloneable<PackageBuilder> {
 
     public Package[] getPackages() {
         Package[] pkgs = new Package[this.pkgRegistryMap.size()];
-//        int i = pkgs.length;
         String errors = null;
         if (!getErrors().isEmpty()) {
             errors = getErrors().toString();
@@ -2888,7 +3102,6 @@ public class PackageBuilder implements DeepCloneable<PackageBuilder> {
             if (errors != null) {
                 pkg.setError( errors );
             }
-//            pkgs[--i] = pkg;
             pkgs[i++] = pkg;
         }
 
@@ -3256,127 +3469,49 @@ public class PackageBuilder implements DeepCloneable<PackageBuilder> {
      */
     public Collection<AbstractClassTypeDeclarationDescr> sortByHierarchy( List<AbstractClassTypeDeclarationDescr> typeDeclarations ) {
 
-        Node<AbstractClassTypeDeclarationDescr> root = new Node<AbstractClassTypeDeclarationDescr>( null );
-        Map<String, Node<AbstractClassTypeDeclarationDescr>> map = new HashMap<String, Node<AbstractClassTypeDeclarationDescr>>();
-        for ( AbstractClassTypeDeclarationDescr tdescr : typeDeclarations ) {
-            String typeName = tdescr.getType().getFullName();
+        HierarchySorter<QualifiedName> sorter = new HierarchySorter<QualifiedName>();
+        Map<QualifiedName, Collection<QualifiedName>> taxonomy = new HashMap<QualifiedName, Collection<QualifiedName>>();
+        Map<QualifiedName, AbstractClassTypeDeclarationDescr> cache = new HashMap<QualifiedName, AbstractClassTypeDeclarationDescr>();
 
-            Node<AbstractClassTypeDeclarationDescr> node = map.get( typeName );
-            if ( node == null ) {
-                node = new Node( typeName,
-                                 tdescr );
-                map.put( typeName,
-                         node );
-            } else if ( node.getData() == null ) {
-                node.setData( tdescr );
+        for ( AbstractClassTypeDeclarationDescr tdescr : typeDeclarations ) {
+            QualifiedName name = tdescr.getType();
+
+            cache.put( name, tdescr );
+
+            if ( taxonomy.get( name ) == null ) {
+                taxonomy.put( name, new ArrayList<QualifiedName>() );
             } else {
                 this.results.add( new TypeDeclarationError( tdescr,
-                                       "Found duplicate declaration for type " + tdescr.getTypeName() ) );
+                        "Found duplicate declaration for type " + tdescr.getTypeName() ) );
             }
 
-                if ( tdescr.getSuperTypes().isEmpty() ) {
-                    root.addChild( node );
-                } else {
-                    for ( QualifiedName qname : tdescr.getSuperTypes() ) {
-                        String superTypeName = qname.getFullName();
+            Collection<QualifiedName> supers = taxonomy.get( name );
 
-                        Node<AbstractClassTypeDeclarationDescr> superNode = map.get( superTypeName );
-                        if ( superNode == null ) {
-                            superNode = new Node<AbstractClassTypeDeclarationDescr>( superTypeName );
-                            map.put( superTypeName,
-                                    superNode );
-                        }
-                        superNode.addChild( node );
-                    }
-                }
+            supers.addAll( tdescr.getSuperTypes() );
+
             for ( TypeFieldDescr field : tdescr.getFields().values() ) {
-                String fieldTypeName = field.getPattern().getObjectType();
-
-                Node<AbstractClassTypeDeclarationDescr> superNode = map.get( fieldTypeName );
-                if ( superNode == null ) {
-                    superNode = new Node<AbstractClassTypeDeclarationDescr>( fieldTypeName );
-                    map.put( fieldTypeName,
-                             superNode );
+                QualifiedName typeName = new QualifiedName( field.getPattern().getObjectType() );
+                if ( ! typeName.equals( name ) && ! hasCircularDependency( name, typeName, taxonomy ) ) {
+                    supers.add( typeName );
                 }
-                superNode.addChild( node );
+
             }
 
         }
-
-
-        for ( Node<AbstractClassTypeDeclarationDescr> n : map.values() ) {
-            if ( n.getData() == null ) {
-                root.addChild(n);
-            }
+        List<QualifiedName> sorted = sorter.sort( taxonomy );
+        ArrayList list = new ArrayList( sorted.size() );
+        for ( QualifiedName name : sorted ) {
+            list.add( cache.get( name ) );
         }
 
-
-
-        List<AbstractClassTypeDeclarationDescr> sortedList = new LinkedList<AbstractClassTypeDeclarationDescr>();
-        root.accept( sortedList );
-
-        return sortedList;
+        return list;
     }
 
-    /**
-     * Utility class for the sorting algorithm
-     *
-     * @param <T>
-     */
-    private static class Node<T> {
-
-        private String        key;
-        private T             data;
-        private List<Node<T>> children;
-
-        public Node( String key ) {
-            this.key = key;
-            this.children = new LinkedList<Node<T>>();
+    private boolean hasCircularDependency( QualifiedName name, QualifiedName typeName, Map<QualifiedName, Collection<QualifiedName>> taxonomy) {
+        if ( taxonomy.containsKey( typeName ) ) {
+            return taxonomy.get( typeName ).contains( name );
         }
-
-        public Node( String key,
-                T content ) {
-            this( key );
-            this.data = content;
-        }
-
-        public void addChild( Node<T> child ) {
-            this.children.add( child );
-        }
-
-        public String getKey() {
-            return key;
-        }
-
-        public T getData() {
-            return data;
-        }
-
-        public void setData( T content ) {
-            this.data = content;
-        }
-
-        public void accept( List<T> list ) {
-            accept( list, new Stack<T>() );
-        }
-
-        private void accept( List<T> list, Stack<T> stack ) {
-            if (this.data != null) {
-                list.remove( this.data );
-                list.add( this.data );
-                stack.push(this.data);
-            }
-
-            for (Node<T> child : children) {
-                if (!stack.contains(child.data)) {
-                    child.accept( list, stack );
-                }
-            }
-
-            if (this.data != null) {
-                stack.pop();
-            }
-        }
+        return false;
     }
 
     //Entity rules inherit package attributes
@@ -3563,6 +3698,12 @@ public class PackageBuilder implements DeepCloneable<PackageBuilder> {
             while (i.hasNext()) {
                 if (resource.equals(i.next().getResource())) {
                     i.remove();
+                }
+            }
+            if ( results.size() == 0 ) {
+                // TODO Error attribution might be bugged
+                for (PackageRegistry packageRegistry : pkgRegistryMap.values()) {
+                    packageRegistry.getPackage().resetErrors();
                 }
             }
         }

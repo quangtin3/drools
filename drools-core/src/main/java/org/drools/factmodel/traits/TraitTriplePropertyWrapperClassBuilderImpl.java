@@ -42,12 +42,15 @@ public class TraitTriplePropertyWrapperClassBuilderImpl implements TraitProperty
 
     private transient ClassDefinition trait;
 
+    private transient TraitRegistry traitRegistry;
+
     protected ClassDefinition getTrait() {
         return trait;
     }
 
-    public void init( ClassDefinition trait ) {
+    public void init( ClassDefinition trait, TraitRegistry traitRegistry ) {
         this.trait = trait;
+        this.traitRegistry = traitRegistry;
     }
 
     
@@ -66,19 +69,20 @@ public class TraitTriplePropertyWrapperClassBuilderImpl implements TraitProperty
             NoSuchFieldException {
 
 
-        ClassWriter cw = new ClassWriter(0);
+        ClassWriter cw = new ClassWriter( ClassWriter.COMPUTE_MAXS );
         FieldVisitor fv;
         MethodVisitor mv;
 
         // get the method bitmask
-        long mask = TraitRegistry.getInstance().getFieldMask(trait.getName(), core.getDefinedClass().getName());
+        long mask = traitRegistry.getFieldMask(trait.getName(), core.getDefinedClass().getName());
 
         String name = TraitFactory.getPropertyWrapperName( trait, core );
         String masterName = TraitFactory.getProxyName(trait, core);
 
 
         String internalWrapper  = BuildUtils.getInternalType(name);
-        String descrCore        = BuildUtils.getTypeDescriptor(core.getClassName());
+        String descrCore        = Type.getDescriptor( core.getDefinedClass() );
+        String internalCore     = Type.getInternalName( core.getDefinedClass() );
 
 
         aliases = new HashMap<String, FieldDefinition>();
@@ -144,7 +148,8 @@ public class TraitTriplePropertyWrapperClassBuilderImpl implements TraitProperty
 //            mv.visitVarInsn(ALOAD, 0);
 //            mv.visitMethodInsn(INVOKESPECIAL, internalWrapper, "initSoftFields", "()V");
             mv.visitInsn( RETURN );
-            mv.visitMaxs( 1, 1 );
+//            mv.visitMaxs( 1, 1 );
+            mv.visitMaxs( 0, 0 );
             mv.visitEnd();
 
 
@@ -157,7 +162,7 @@ public class TraitTriplePropertyWrapperClassBuilderImpl implements TraitProperty
                     "(" + 
                             descrCore + 
                             Type.getDescriptor( TripleStore.class ) +
-                            Type.getDescriptor(TripleFactory.class ) +
+                            Type.getDescriptor( TripleFactory.class ) +
                     ")V",
                     null,
                     null);
@@ -199,7 +204,8 @@ public class TraitTriplePropertyWrapperClassBuilderImpl implements TraitProperty
             mv.visitVarInsn( ALOAD, 0 );
             mv.visitMethodInsn( INVOKESPECIAL, internalWrapper, "initSoftFields", "()V" );
             mv.visitInsn( RETURN );
-            mv.visitMaxs( 2, 4 );
+//            mv.visitMaxs( 2, 4 );
+            mv.visitMaxs( 0, 0 );
             mv.visitEnd();
 
 
@@ -344,8 +350,10 @@ public class TraitTriplePropertyWrapperClassBuilderImpl implements TraitProperty
         mv.visitVarInsn( ASTORE, 2 );
         mv.visitVarInsn( ALOAD, 2 );
         mv.visitInsn( ARETURN );
-        mv.visitMaxs( 2 + stack, 3 );
+//        mv.visitMaxs( 2 + stack, 3 );
+        mv.visitMaxs( 0, 0 );
         mv.visitEnd();
+
     }
 
 
@@ -363,7 +371,8 @@ public class TraitTriplePropertyWrapperClassBuilderImpl implements TraitProperty
         int stackSize = initSoftFields( mv, wrapperName, trait, mask );
 
         mv.visitInsn(RETURN);
-        mv.visitMaxs(4 + stackSize, 2);
+//        mv.visitMaxs(4 + stackSize, 2);
+        mv.visitMaxs( 0, 0 );
         mv.visitEnd();
     }
 
@@ -469,7 +478,8 @@ public class TraitTriplePropertyWrapperClassBuilderImpl implements TraitProperty
         mv.visitMethodInsn( INVOKESPECIAL, internalWrapper, "clearSoftFields", "()V" );
 
         mv.visitInsn( RETURN );
-        mv.visitMaxs( stack , 1 );
+//        mv.visitMaxs( stack , 1 );
+        mv.visitMaxs( 0, 0 );
         mv.visitEnd();
 
 
@@ -494,7 +504,8 @@ public class TraitTriplePropertyWrapperClassBuilderImpl implements TraitProperty
             }
         }
         mv.visitInsn( RETURN );
-        mv.visitMaxs( 4 + stackSize, 2 );
+//        mv.visitMaxs( 4 + stackSize, 2 );
+        mv.visitMaxs( 0, 0 );
         mv.visitEnd();
     }
 
@@ -543,10 +554,18 @@ public class TraitTriplePropertyWrapperClassBuilderImpl implements TraitProperty
         MethodVisitor mv = cw.visitMethod( ACC_PUBLIC, "containsValue", "(" + Type.getDescriptor( Object.class ) + ")Z", null, null );
         mv.visitCode();
 
-        // null check
-        mv.visitVarInsn(ALOAD, 1);
-        Label l99 = new Label();
-        mv.visitJumpInsn(IFNONNULL, l99);
+        boolean hasNillable = false;
+        for ( FieldDefinition field : core.getFieldsDefinitions() ) {
+            if ( ! BuildUtils.isPrimitive( field.getTypeName() ) ) {
+                hasNillable = true;
+            }
+        }
+        Label l99 = null;
+        if ( hasNillable ) {
+            mv.visitVarInsn(ALOAD, 1);
+            l99 = new Label();
+            mv.visitJumpInsn(IFNONNULL, l99);
+        }
 
         int j = 0;
         int N = core.getFieldsDefinitions().size();
@@ -578,7 +597,8 @@ public class TraitTriplePropertyWrapperClassBuilderImpl implements TraitProperty
                             "(" + Type.getDescriptor( Object.class ) + ")Z" );
 
         mv.visitInsn( IRETURN );
-        mv.visitMaxs( core.getFieldsDefinitions().size() > 0 ? 3 : 2, 2 );
+//        mv.visitMaxs( core.getFieldsDefinitions().size() > 0 ? 3 : 2, 2 );
+        mv.visitMaxs( 0, 0 );
         mv.visitEnd();
 
     }
@@ -623,7 +643,8 @@ public class TraitTriplePropertyWrapperClassBuilderImpl implements TraitProperty
                             "(" + Type.getDescriptor( Object.class ) + ")Z" );
 
         mv.visitInsn( IRETURN );
-        mv.visitMaxs( 2, 2 );
+//        mv.visitMaxs( 2, 2 );
+        mv.visitMaxs( 0, 0 );
         mv.visitEnd();
     }
 
@@ -645,8 +666,9 @@ public class TraitTriplePropertyWrapperClassBuilderImpl implements TraitProperty
         }
 
         mv.visitInsn(IRETURN);
-        mv.visitMaxs( core.getFieldsDefinitions().size() > 0 ? 2 : 1,
-                1 );
+//        mv.visitMaxs( core.getFieldsDefinitions().size() > 0 ? 2 : 1,
+//                1 );
+        mv.visitMaxs( 0, 0 );
         mv.visitEnd();
 
     }
@@ -669,7 +691,8 @@ public class TraitTriplePropertyWrapperClassBuilderImpl implements TraitProperty
             mv.visitInsn( ICONST_0 );
         }
         mv.visitInsn( IRETURN );
-        mv.visitMaxs( 1, 1 );
+//        mv.visitMaxs( 1, 1 );
+        mv.visitMaxs( 0, 0 );
         mv.visitEnd();
     }
 
@@ -723,7 +746,8 @@ public class TraitTriplePropertyWrapperClassBuilderImpl implements TraitProperty
                             "(" + Type.getDescriptor( Object.class ) + ")" + Type.getDescriptor( Object.class ) );
 
         mv.visitInsn( ARETURN );
-        mv.visitMaxs( 2, 2 );
+//        mv.visitMaxs( 2, 2 );
+        mv.visitMaxs( 0, 0 );
         mv.visitEnd();
     }
 
@@ -779,7 +803,8 @@ public class TraitTriplePropertyWrapperClassBuilderImpl implements TraitProperty
                             "put",
                             "(" + Type.getDescriptor( String.class) + Type.getDescriptor( Object.class ) + ")" + Type.getDescriptor( Object.class ) );
         mv.visitInsn( ARETURN );
-        mv.visitMaxs( 4, 5 );
+//        mv.visitMaxs( 4, 5 );
+        mv.visitMaxs( 0, 0 );
         mv.visitEnd();
     }
     
@@ -833,7 +858,8 @@ public class TraitTriplePropertyWrapperClassBuilderImpl implements TraitProperty
 
         mv.visitVarInsn( ALOAD, 1 );
         mv.visitInsn( ARETURN );
-        mv.visitMaxs( core.getFieldsDefinitions().size() > 0 ?  4 : 2, 2 );
+//        mv.visitMaxs( core.getFieldsDefinitions().size() > 0 ?  4 : 2, 2 );
+        mv.visitMaxs( 0, 0 );
         mv.visitEnd();
 
     }
@@ -879,7 +905,8 @@ public class TraitTriplePropertyWrapperClassBuilderImpl implements TraitProperty
 
         mv.visitVarInsn( ALOAD, 1 );
         mv.visitInsn( ARETURN );
-        mv.visitMaxs( 2, 2 );
+//        mv.visitMaxs( 2, 2 );
+        mv.visitMaxs( 0, 0 );
         mv.visitEnd();
     }
 
@@ -934,7 +961,8 @@ public class TraitTriplePropertyWrapperClassBuilderImpl implements TraitProperty
         mv.visitVarInsn( ALOAD, 1 );
         mv.visitInsn( ARETURN );
 
-        mv.visitMaxs( core.getFieldsDefinitions().size() > 0 ? 3 : 2, 2 );
+//        mv.visitMaxs( core.getFieldsDefinitions().size() > 0 ? 3 : 2, 2 );
+        mv.visitMaxs( 0, 0 );
         mv.visitEnd();
     }
 
@@ -980,7 +1008,8 @@ public class TraitTriplePropertyWrapperClassBuilderImpl implements TraitProperty
                                 "(" + Type.getDescriptor( String.class ) +")" + Type.getDescriptor( StringBuilder.class ));
             mv.visitMethodInsn( INVOKEVIRTUAL, Type.getInternalName( StringBuilder.class ), "toString", "()" + Type.getDescriptor( String.class ) );
             mv.visitInsn( ARETURN );
-            mv.visitMaxs( 2, 1 );
+//            mv.visitMaxs( 2, 1 );
+            mv.visitMaxs( 0, 0 );
             mv.visitEnd();
         }
         {
@@ -995,7 +1024,8 @@ public class TraitTriplePropertyWrapperClassBuilderImpl implements TraitProperty
             mv.visitMethodInsn( INVOKEVIRTUAL, BuildUtils.getInternalType( wrapper ), "put", 
                                 "(" + Type.getDescriptor( String.class ) + Type.getDescriptor( Object.class ) + ")" + Type.getDescriptor( Object.class ) );
             mv.visitInsn( ARETURN);
-            mv.visitMaxs( 3, 3 );
+//            mv.visitMaxs( 3, 3 );
+            mv.visitMaxs( 0, 0 );
             mv.visitEnd();
         }
 
@@ -1019,7 +1049,8 @@ public class TraitTriplePropertyWrapperClassBuilderImpl implements TraitProperty
                                 "(" + Type.getDescriptor( Object.class ) + ")" +  Type.getDescriptor( Collection.class ) );
             mv.visitMethodInsn( INVOKEVIRTUAL, Type.getInternalName( Object.class ), "hashCode", "()I" );
             mv.visitInsn( IRETURN );
-            mv.visitMaxs( 2, 1 );
+//            mv.visitMaxs( 2, 1 );
+            mv.visitMaxs( 0, 0 );
             mv.visitEnd();
         }
 
@@ -1029,7 +1060,8 @@ public class TraitTriplePropertyWrapperClassBuilderImpl implements TraitProperty
             mv.visitVarInsn( ALOAD, 0 );
             mv.visitFieldInsn( GETFIELD, BuildUtils.getInternalType( wrapper ), "object", BuildUtils.getTypeDescriptor( core.getName() ) );
             mv.visitInsn( ARETURN );
-            mv.visitMaxs( 1, 1 );
+//            mv.visitMaxs( 1, 1 );
+            mv.visitMaxs( 0, 0 );
             mv.visitEnd();
         }
         {
@@ -1040,7 +1072,8 @@ public class TraitTriplePropertyWrapperClassBuilderImpl implements TraitProperty
             mv.visitTypeInsn( CHECKCAST, BuildUtils.getInternalType( core.getName() ) );
             mv.visitFieldInsn( PUTFIELD, BuildUtils.getInternalType( wrapper ), "object", BuildUtils.getTypeDescriptor( core.getName() ) );
             mv.visitInsn( RETURN );
-            mv.visitMaxs( 2, 2 );
+//            mv.visitMaxs( 2, 2 );
+            mv.visitMaxs( 0, 0 );
             mv.visitEnd();
         }
 

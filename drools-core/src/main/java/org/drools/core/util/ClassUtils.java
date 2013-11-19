@@ -18,6 +18,7 @@ package org.drools.core.util;
 
 import org.drools.common.DroolsObjectInputStream;
 import org.drools.common.DroolsObjectOutputStream;
+import org.drools.definition.type.Modifies;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -28,14 +29,19 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.SortedSet;
+import java.util.TreeSet;
 
 public final class ClassUtils {
     private static Map<String, Class<?>> classes = Collections.synchronizedMap( new HashMap() );
@@ -69,7 +75,7 @@ public final class ClassUtils {
      */
     public static String stripExtension(final String pResourceName) {
         final int i = pResourceName.lastIndexOf( '.' );
-        return pResourceName.substring( 0, i );
+        return pResourceName.substring(0, i);
     }
 
     public static String toJavaCasing(final String pName) {
@@ -83,8 +89,8 @@ public final class ClassUtils {
         final int rootLength = base.getAbsolutePath().length();
         final String absFileName = file.getAbsolutePath();
         final int p = absFileName.lastIndexOf( '.' );
-        final String relFileName = absFileName.substring( rootLength + 1, p );
-        return relFileName.replace( File.separatorChar, '.' );
+        final String relFileName = absFileName.substring(rootLength + 1, p);
+        return relFileName.replace(File.separatorChar, '.');
     }
 
     public static String relative(final File base,
@@ -112,8 +118,8 @@ public final class ClassUtils {
     }
 
     public static Object instantiateObject(String className) {
-        return instantiateObject( className,
-                                  null );
+        return instantiateObject(className,
+                null);
     }
 
     /**
@@ -312,23 +318,85 @@ public final class ClassUtils {
     }
 
     public static List<String> getSettableProperties(Class<?> clazz) {
-        List<String> settableProperties = new ArrayList<String>();
+        Set<SetterInClass> props = new TreeSet<SetterInClass>();
         for (Method m : clazz.getMethods()) {
             if (m.getParameterTypes().length == 1) {
                 String propName = setter2property(m.getName());
                 if (propName != null) {
-                    settableProperties.add(propName);
+                    props.add( new SetterInClass( propName, m.getDeclaringClass() ) );
+                }
+            }
+
+            processModifiesAnnotation(clazz, props, m);
+        }
+
+        for (Field f : clazz.getFields()) {
+            if ( !Modifier.isFinal( f.getModifiers() ) && !Modifier.isStatic(f.getModifiers()) ) {
+                props.add( new SetterInClass( f.getName(), f.getDeclaringClass() ) );
+            }
+        }
+
+        List<String> settableProperties = new ArrayList<String>();
+        for ( SetterInClass setter : props ) {
+            settableProperties.add(setter.setter);
+        }
+        return settableProperties;
+    }
+
+    private static void processModifiesAnnotation(Class<?> clazz, Set<SetterInClass> props, Method m) {
+        Modifies modifies = m.getAnnotation( Modifies.class );
+        if (modifies != null) {
+            for (String prop : modifies.value()) {
+                prop = prop.trim();
+                try {
+                    Field field = clazz.getField(prop);
+                    props.add( new SetterInClass( field.getName(), field.getDeclaringClass() ) );
+                } catch (NoSuchFieldException e) {
+                    String getter = "get" + prop.substring(0, 1).toUpperCase() + prop.substring(1);
+                    try {
+                        Method method = clazz.getMethod(getter);
+                        props.add( new SetterInClass( prop, method.getDeclaringClass() ) );
+                    } catch (NoSuchMethodException e1) {
+                        getter = "is" + prop.substring(0, 1).toUpperCase() + prop.substring(1);
+                        try {
+                            Method method = clazz.getMethod(getter);
+                            props.add( new SetterInClass( prop, method.getDeclaringClass() ) );
+                        } catch (NoSuchMethodException e2) {
+                            throw new RuntimeException(e2);
+                        }
+                    }
                 }
             }
         }
-        for (Field f : clazz.getFields()) {
-            String fieldName = f.getName();
-            if (!settableProperties.contains(fieldName)) {
-                settableProperties.add(fieldName);
-            }
+    }
+
+    private static class SetterInClass implements Comparable {
+        private final String setter;
+        private final Class<?> clazz;
+
+        private SetterInClass(String setter, Class<?> clazz) {
+            this.setter = setter;
+            this.clazz = clazz;
         }
-        Collections.sort(settableProperties);
-        return settableProperties;
+
+        public int compareTo(Object o) {
+            SetterInClass other = (SetterInClass) o;
+            if (clazz == other.clazz) {
+                return setter.compareTo(other.setter);
+            }
+            return clazz.isAssignableFrom(other.clazz) ? -1 : 1;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            SetterInClass other = (SetterInClass) obj;
+            return clazz == other.clazz && setter.equals(other.setter);
+        }
+
+        @Override
+        public int hashCode() {
+            return 29 * clazz.hashCode() + 31 * setter.hashCode();
+        }
     }
 
     public static String getter2property(String methodName) {

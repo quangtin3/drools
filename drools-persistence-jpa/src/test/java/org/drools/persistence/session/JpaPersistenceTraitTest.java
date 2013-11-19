@@ -63,7 +63,7 @@ public class JpaPersistenceTraitTest {
 
 
     @Test
-    public void testTraitsWithJPA() {
+    public void testTripleBasedTraitsWithJPA() {
         String str = "package org.drools.trait.test; \n" +
                 "global java.util.List list; \n" +
                 "" +
@@ -73,11 +73,13 @@ public class JpaPersistenceTraitTest {
                 "end \n " +
                 "" +
                 "declare trait Mask \n" +
+                "  @propertyReactive \n" +
                 "  fld : String \n" +
                 "  xyz : int  \n" +
                 "end \n" +
                 "\n " +
                 "declare trait Cloak \n" +
+                "  @propertyReactive \n" +
                 "  fld : String \n" +
                 "  ijk : String  \n" +
                 "end \n" +
@@ -153,14 +155,12 @@ public class JpaPersistenceTraitTest {
             }
         }
         assertNotNull( core );
-        assertEquals(2, core.getDynamicProperties().size());
+        assertEquals( 2, core._getDynamicProperties().size() );
         assertNotNull( core.getTrait( "org.drools.factmodel.traits.Thing" ) );
         assertNotNull( core.getTrait( "org.drools.trait.test.Mask" ) );
         assertNotNull( core.getTrait( "org.drools.trait.test.Cloak" ) );
 
     }
-
-
 
 
 
@@ -175,11 +175,13 @@ public class JpaPersistenceTraitTest {
                 "end \n " +
                 "" +
                 "declare trait Mask2 \n" +
+                "  @propertyReactive \n" +
                 "  fld : String \n" +
                 "  xyz : int  \n" +
                 "end \n" +
                 "\n " +
                 "declare trait Cloak2 \n" +
+                "  @propertyReactive \n" +
                 "  fld : String \n" +
                 "  ijk : String  \n" +
                 "end \n" +
@@ -256,7 +258,7 @@ public class JpaPersistenceTraitTest {
             }
         }
         assertNotNull( core );
-        assertEquals( 2, core.getDynamicProperties().size() );
+        assertEquals( 2, core._getDynamicProperties().size() );
         assertNotNull( core.getTrait( "org.drools.factmodel.traits.Thing" ) );
         assertNotNull( core.getTrait( "org.drools.trait.test.Mask2" ) );
         assertNotNull( core.getTrait( "org.drools.trait.test.Cloak2" ) );
@@ -265,8 +267,8 @@ public class JpaPersistenceTraitTest {
 
 
 
-    @Test
-    public void testTraitsLegacyWrapperWithJPA() {
+
+    public void traitsLegacyWrapperWithJPA( TraitFactory.VirtualPropertyMode mode ) {
         String str = "package org.drools.trait.test; \n" +
                 "global java.util.List list; \n" +
                 "" +                "" +
@@ -275,6 +277,7 @@ public class JpaPersistenceTraitTest {
                 "end \n " +
                 "" +
                 "declare trait Mask \n" +
+                "  @propertyReactive \n" +
                 "  fld : String \n" +
                 "  xyz : int  \n" +
                 "end \n" +
@@ -311,6 +314,7 @@ public class JpaPersistenceTraitTest {
         kbase.addKnowledgePackages( kbuilder.getKnowledgePackages() );
 
         StatefulKnowledgeSession ksession = JPAKnowledgeService.newStatefulKnowledgeSession( kbase, null, env );
+        TraitFactory.setMode( mode, ksession.getKnowledgeBase() );
         List<?> list = new ArrayList<Object>();
 
         ksession.setGlobal("list",
@@ -321,6 +325,17 @@ public class JpaPersistenceTraitTest {
         assertEquals( 1,
                 list.size() );
         int id = ksession.getId();
+
+
+        Collection yOld = ksession.getObjects();
+        TraitableBean coreOld = null;
+        for ( Object o : yOld ) {
+            if ( o instanceof TraitableBean ) {
+                coreOld = (TraitableBean) o;
+                break;
+            }
+        }
+        assertNotNull( coreOld );
 
 
         StatefulKnowledgeSession ksession2 = JPAKnowledgeService.loadStatefulKnowledgeSession( id, kbase, null, env );
@@ -339,9 +354,21 @@ public class JpaPersistenceTraitTest {
             }
         }
         assertNotNull( core );
-        assertEquals( 1, core.getDynamicProperties().size() );
+        assertEquals( 1, core._getDynamicProperties().size() );
         assertNotNull( core.getTrait( "org.drools.factmodel.traits.Thing" ) );
         assertNotNull( core.getTrait( "org.drools.trait.test.Mask" ) );
 
     }
+
+
+    @Test
+    public void testTraitsOnLegacyJPATriple() {
+        traitsLegacyWrapperWithJPA( TraitFactory.VirtualPropertyMode.TRIPLES );
+    }
+
+    @Test
+    public void testTraitsOnLegacyJPAMap() {
+        traitsLegacyWrapperWithJPA( TraitFactory.VirtualPropertyMode.MAP );
+    }
+
 }

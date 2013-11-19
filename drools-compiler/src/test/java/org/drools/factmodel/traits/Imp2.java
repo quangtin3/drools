@@ -18,64 +18,85 @@ package org.drools.factmodel.traits;
 
 import java.util.*;
 
-public class Imp2 {
+public class Imp2 implements TraitableBean<Imp2,Imp2> {
 
     private String name;
     private String school;
 
 
     private Map<String,Object> __$$dynamic_properties_map$$ = new HashMap<String,Object>();
-    private Map<String,Thing> __$$dynamic_traits_map$$;
+    private Map<String,Thing<Imp2>> __$$dynamic_traits_map$$;
 
-    public Map<String,Object> getDynamicProperties() {
+    public Map<String,Object> _getDynamicProperties() {
         return __$$dynamic_properties_map$$;
     }
 
-    public void setDynamicProperties( Map<String,Object> map ) {
+    public void _setDynamicProperties( Map<String,Object> map ) {
         __$$dynamic_properties_map$$ = map;
     }
 
 
     private Map<String, ? extends Thing> traits = new HashMap<String, Thing>();
 
-    public void setTraitMap(Map map) {
+    public void _setTraitMap(Map map) {
         __$$dynamic_traits_map$$ = map;
     }
 
 
-    public Map<String, Thing> getTraitMap() {
+    public Map<String, Thing<Imp2>> _getTraitMap() {
         if ( __$$dynamic_traits_map$$ == null ) {
-            __$$dynamic_traits_map$$ = new HashMap<String, Thing>();
+            __$$dynamic_traits_map$$ = new HashMap<String, Thing<Imp2>>();
         }
         return __$$dynamic_traits_map$$;
     }
 
     public void addTrait(String type, Thing proxy) {
-        getTraitMap().put(type, proxy);
+        _getTraitMap().put(type, proxy);
     }
 
     public Thing getTrait(String type) {
-        return getTraitMap().get( type );
+        return _getTraitMap().get( type );
     }
 
     public boolean hasTrait(String type) {
-        return getTraitMap().containsKey(type);
+        return _getTraitMap().containsKey(type);
     }
 
-    public Thing removeTrait(String type) {
-        return getTraitMap().remove( type );
+    public BitSet getCurrentTypeCode() {
+        return ((TraitTypeMap) __$$dynamic_traits_map$$).getCurrentTypeCode();
+    }
+
+    public Collection<Thing<Imp2>> removeTrait(String type) {
+        return ((TraitTypeMap)_getTraitMap()).removeCascade( type );
+    }
+
+    public Collection<Thing<Imp2>> removeTrait( BitSet typeCode ) {
+        return ((TraitTypeMap)_getTraitMap()).removeCascade( typeCode );
     }
 
     public Collection<String> getTraits() {
-        return getTraitMap().keySet();
+        return _getTraitMap().keySet();
     }
 
+    public void denyTrait(Class trait) throws LogicalTypeInconsistencyException {
+        //To change body of implemented methods use File | Settings | File Templates.
+    }
 
+    public void allowTrait(Class trait) {
+        //To change body of implemented methods use File | Settings | File Templates.
+    }
 
+    public Collection<Thing> getMostSpecificTraits() {
+        return null;  //To change body of implemented methods use File | Settings | File Templates.
+    }
 
+    public void _setBottomTypeCode(BitSet code) {
+        //To change body of implemented methods use File | Settings | File Templates.
+    }
 
-
-
+    public BitSet _getBottomTypeCode() {
+        return null;  //To change body of implemented methods use File | Settings | File Templates.
+    }
 
 
     private Set field;

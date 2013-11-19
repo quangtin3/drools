@@ -18,17 +18,23 @@ package org.drools.base.evaluators;
 
 import org.drools.base.BaseEvaluator;
 import org.drools.base.ValueType;
+import org.drools.common.InternalFactHandle;
 import org.drools.common.InternalWorkingMemory;
 import org.drools.factmodel.traits.*;
+import org.drools.reteoo.ReteooRuleBase;
+import org.drools.rule.VariableRestriction;
 import org.drools.rule.VariableRestriction.VariableContextEntry;
 import org.drools.runtime.ObjectFilter;
 import org.drools.spi.Evaluator;
 import org.drools.spi.FieldValue;
 import org.drools.spi.InternalReadAccessor;
+import org.drools.util.CodedHierarchy;
+import org.drools.util.HierarchyEncoderImpl;
 
 import java.io.IOException;
 import java.io.ObjectInput;
 import java.io.ObjectOutput;
+import java.util.BitSet;
 import java.util.Collection;
 import java.util.Iterator;
 
@@ -146,10 +152,9 @@ public class IsAEvaluatorDefinition implements EvaluatorDefinition {
         /**
          * @inheridDoc
          */
-        public boolean evaluate(InternalWorkingMemory workingMemory,
-                InternalReadAccessor extractor, Object object, FieldValue value) {
-            final Object objectValue = extractor
-                    .getValue(workingMemory, object);
+        public boolean evaluate( InternalWorkingMemory workingMemory,
+                InternalReadAccessor extractor, InternalFactHandle handle, FieldValue value ) {
+            final Object objectValue = extractor.getValue( workingMemory, handle.getObject() );
 
             Object typeName = value.getValue();
             if ( typeName instanceof Class ) {
@@ -160,7 +165,7 @@ public class IsAEvaluatorDefinition implements EvaluatorDefinition {
             if ( objectValue instanceof Thing ) {
                 Thing thing = (Thing) objectValue;
                 core = (TraitableBean) thing.getCore();
-                return this.getOperator().isNegated() ^ core.hasTrait(typeName.toString() );
+                return this.getOperator().isNegated() ^ core.hasTrait( typeName.toString() );
             } else if ( objectValue instanceof TraitableBean ) {
                 core = (TraitableBean) objectValue;
                 return this.getOperator().isNegated() ^ core.hasTrait( typeName.toString() );
@@ -196,10 +201,10 @@ public class IsAEvaluatorDefinition implements EvaluatorDefinition {
         }
 
         public boolean evaluate(InternalWorkingMemory workingMemory,
-                                InternalReadAccessor leftExtractor, Object left,
-                                InternalReadAccessor rightExtractor, Object right) {
-            final Object value1 = leftExtractor.getValue(workingMemory, left);
-            final Object value2 = rightExtractor.getValue(workingMemory, right);
+                                InternalReadAccessor leftExtractor, InternalFactHandle left,
+                                InternalReadAccessor rightExtractor, InternalFactHandle right) {
+            final Object value1 = leftExtractor.getValue( workingMemory, left );
+            final Object value2 = rightExtractor.getValue( workingMemory, right );
 
             Object target = value1;
             Object source = value2;
@@ -208,54 +213,63 @@ public class IsAEvaluatorDefinition implements EvaluatorDefinition {
         }
 
 
-        public boolean evaluateCachedLeft(InternalWorkingMemory workingMemory,
-                VariableContextEntry context, Object right) {
+        public boolean evaluateCachedLeft( InternalWorkingMemory workingMemory,
+                VariableContextEntry context, InternalFactHandle right ) {
 
-            Object target = right;
+            Object target = ((VariableRestriction.ObjectVariableContextEntry) context).left;
+            Object source = right.getObject();
+
+            return compare( source, target, workingMemory );
+        }
+
+        public boolean evaluateCachedRight( InternalWorkingMemory workingMemory,
+                VariableContextEntry context, InternalFactHandle left ) {
+
+            Object target = left.getObject();
             Object source = context.getObject();
 
             return compare( source, target, workingMemory );
         }
 
-        public boolean evaluateCachedRight(InternalWorkingMemory workingMemory,
-                VariableContextEntry context, Object left) {
-
-            Object target = left;
-            Object source = context.getObject();
-
-            return compare( source, target, workingMemory );
-        }
 
 
-
-        private boolean compare(Object source, Object target, InternalWorkingMemory workingMemory ) {
-            Collection sourceTraits = null;
-            Collection targetTraits = null;
-            if ( source instanceof Thing) {
-                sourceTraits = ((TraitableBean) ((Thing) source).getCore()).getTraits();
+        private boolean compare( Object source, Object target, InternalWorkingMemory workingMemory ) {
+            BitSet sourceTraits = null;
+            BitSet targetTraits = null;
+            if ( source instanceof Thing ) {
+                sourceTraits = ((TraitableBean) ((Thing) source).getCore()).getCurrentTypeCode();
             } else if ( source instanceof TraitableBean ) {
-                sourceTraits = ((TraitableBean) source).getTraits();
+                sourceTraits = ((TraitableBean) source).getCurrentTypeCode();
             } else {
                 TraitableBean tbean = lookForWrapper( source, workingMemory);
                 if ( tbean != null ) {
-                    sourceTraits = tbean.getTraits();
+                    sourceTraits = tbean.getCurrentTypeCode();
                 }
             }
 
-            if ( target instanceof Thing) {
-                targetTraits = ((TraitableBean) ((Thing) target).getCore()).getTraits();
+            if ( target instanceof Class ) {
+                CodedHierarchy x = ((ReteooRuleBase) workingMemory.getRuleBase()).getConfiguration().getComponentFactory().getTraitRegistry().getHierarchy();
+                targetTraits = x.getCode( ((Class) target).getName() );
+            } else if ( target instanceof String ) {
+                CodedHierarchy x = ((ReteooRuleBase) workingMemory.getRuleBase()).getConfiguration().getComponentFactory().getTraitRegistry().getHierarchy();
+                targetTraits = x.getCode( target );
+            } else if ( target instanceof Thing ) {
+                targetTraits = ((TraitableBean) ((Thing) target).getCore()).getCurrentTypeCode();
             } else if ( target instanceof TraitableBean ) {
-                targetTraits = ((TraitableBean) target).getTraits();
+                targetTraits = ((TraitableBean) target).getCurrentTypeCode();
             } else {
-                TraitableBean tbean = lookForWrapper( target, workingMemory);
+                TraitableBean tbean = lookForWrapper( target, workingMemory );
                 if ( tbean != null ) {
-                    targetTraits = tbean.getTraits();
+                    targetTraits = tbean.getCurrentTypeCode();
                 }
             }
 
-            return ( targetTraits != null && sourceTraits != null &&
-                    ( this.getOperator().isNegated() ^ sourceTraits.containsAll( targetTraits ) ) )
-                   || ( sourceTraits == null && this.getOperator().isNegated() ) ;
+
+            if (sourceTraits == null || targetTraits == null) {
+                return getOperator().isNegated();
+            }
+
+            return HierarchyEncoderImpl.supersetOrEqualset(sourceTraits, targetTraits) ^ getOperator().isNegated();
         }
 
         @Override

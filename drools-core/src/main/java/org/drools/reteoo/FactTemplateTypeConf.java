@@ -124,6 +124,10 @@ public class FactTemplateTypeConf
         return false;
     }
 
+    public boolean isTrait() {
+        return false;
+    }
+
     public TypeDeclaration getTypeDeclaration() {
         return null;
     }
@@ -148,4 +152,7 @@ public class FactTemplateTypeConf
         return false;
     }
 
+    public String getTypeName() {
+    	return this.factTemplate.getName();
+    }
 }
