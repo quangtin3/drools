@@ -24,8 +24,8 @@ import org.junit.Test;
 
 public class UnicodeInXLSTest {
 
-	@Test
-    public void testCzechXLSDecisionTable() throws FileNotFoundException {
+    @Test
+    public void testUnicodeXLSDecisionTable() throws FileNotFoundException {
 
         DecisionTableConfiguration dtconf = KnowledgeBuilderFactory.newDecisionTableConfiguration();
         dtconf.setInputType(DecisionTableInputType.XLS);
@@ -38,9 +38,9 @@ public class UnicodeInXLSTest {
         }
         KnowledgeBase kbase = KnowledgeBaseFactory.newKnowledgeBase();
         kbase.addKnowledgePackages(kbuilder.getKnowledgePackages());
-        
+
         StatefulKnowledgeSession ksession = kbase.newStatefulKnowledgeSession();
-        
+
         List<Command<?>> commands = new ArrayList<Command<?>>();
         List<Člověk> dospělí = new ArrayList<Člověk>();
         commands.add(CommandFactory.newSetGlobal("dospělí", dospělí));
@@ -54,12 +54,17 @@ public class UnicodeInXLSTest {
 
         // people with age greater than 18 should be added to list of adults
         assertNotNull(kbase.getRule("org.drools.decisiontable", "přidej k dospělým"));
-        assertEquals(dospělí.size(), 1);
+        assertEquals(dospělí.size(), 5);
         assertEquals(dospělí.iterator().next().getJméno(), "Řehoř");
+
+        assertNotNull(kbase.getRule("org.drools.decisiontable", "привет мир"));
+        assertNotNull(kbase.getRule("org.drools.decisiontable", "你好世界"));
+        assertNotNull(kbase.getRule("org.drools.decisiontable", "hallå världen"));
+        assertNotNull(kbase.getRule("org.drools.decisiontable", "مرحبا العالم"));
 
         ksession.dispose();
     }
-	
+
     public static class Člověk {
 
         private int věk;
