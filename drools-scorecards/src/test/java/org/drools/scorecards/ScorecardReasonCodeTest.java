@@ -11,36 +11,37 @@ import org.drools.builder.ResourceType;
 import org.drools.definition.type.FactType;
 import org.drools.io.ResourceFactory;
 import org.drools.runtime.StatefulKnowledgeSession;
-import org.junit.Before;
 import org.junit.Test;
 
 import static junit.framework.Assert.*;
 import static org.drools.scorecards.ScorecardCompiler.DrlType.INTERNAL_DECLARED_TYPES;
+import org.junit.BeforeClass;
 
 public class ScorecardReasonCodeTest {
+
     private static PMML pmmlDocument;
     private static String drl;
     private static ScorecardCompiler scorecardCompiler;
-    @Before
-    public void setUp() throws Exception {
+
+    @BeforeClass
+    public static void setUp() throws Exception {
         scorecardCompiler = new ScorecardCompiler(INTERNAL_DECLARED_TYPES);
         boolean compileResult = scorecardCompiler.compileFromExcel(PMMLDocumentTest.class.getResourceAsStream("/scoremodel_reasoncodes.xls"));
         if (!compileResult) {
-            for(ScorecardError error : scorecardCompiler.getScorecardParseErrors()){
-                System.out.println("setup :"+error.getErrorLocation()+"->"+error.getErrorMessage());
+            for (ScorecardError error : scorecardCompiler.getScorecardParseErrors()) {
+                System.out.println("setup :" + error.getErrorLocation() + "->" + error.getErrorMessage());
             }
         }
         drl = scorecardCompiler.getDRL();
         Assert.assertNotNull(drl);
         assertTrue(drl.length() > 0);
         //System.out.println(drl);
+        pmmlDocument = scorecardCompiler.getPMMLDocument();
+        Assert.assertNotNull(pmmlDocument);
     }
 
     @Test
     public void testPMMLDocument() throws Exception {
-        pmmlDocument = scorecardCompiler.getPMMLDocument();
-        Assert.assertNotNull(pmmlDocument);
-
         String pmml = scorecardCompiler.getPMML();
         Assert.assertNotNull(pmml);
         assertTrue(pmml.length() > 0);
@@ -52,8 +53,8 @@ public class ScorecardReasonCodeTest {
         ScorecardCompiler scorecardCompiler = new ScorecardCompiler(INTERNAL_DECLARED_TYPES);
         scorecardCompiler.compileFromExcel(PMMLDocumentTest.class.getResourceAsStream("/scoremodel_c.xls"));
         PMML pmml = scorecardCompiler.getPMMLDocument();
-        for (Object serializable : pmml.getAssociationModelsAndBaselineModelsAndClusteringModels()){
-            if (serializable instanceof Scorecard){
+        for (Object serializable : pmml.getAssociationModelsAndBaselineModelsAndClusteringModels()) {
+            if (serializable instanceof Scorecard) {
                 assertFalse(((Scorecard) serializable).isUseReasonCodes());
             }
         }
@@ -61,25 +62,25 @@ public class ScorecardReasonCodeTest {
 
     @Test
     public void testUseReasonCodes() throws Exception {
-        for (Object serializable : pmmlDocument.getAssociationModelsAndBaselineModelsAndClusteringModels()){
-            if (serializable instanceof Scorecard){
-                assertTrue(((Scorecard)serializable).isUseReasonCodes());
-                assertEquals(100.0, ((Scorecard)serializable).getInitialScore());
-                assertEquals("pointsBelow",((Scorecard)serializable).getReasonCodeAlgorithm());
+        for (Object serializable : pmmlDocument.getAssociationModelsAndBaselineModelsAndClusteringModels()) {
+            if (serializable instanceof Scorecard) {
+                assertTrue(((Scorecard) serializable).isUseReasonCodes());
+                assertEquals(100.0, ((Scorecard) serializable).getInitialScore());
+                assertEquals("pointsBelow", ((Scorecard) serializable).getReasonCodeAlgorithm());
             }
         }
     }
 
     @Test
     public void testReasonCodes() throws Exception {
-        for (Object serializable : pmmlDocument.getAssociationModelsAndBaselineModelsAndClusteringModels()){
-            if (serializable instanceof Scorecard){
-                for (Object obj :((Scorecard)serializable) .getExtensionsAndCharacteristicsAndMiningSchemas()){
-                    if (obj instanceof Characteristics){
-                        Characteristics characteristics = (Characteristics)obj;
+        for (Object serializable : pmmlDocument.getAssociationModelsAndBaselineModelsAndClusteringModels()) {
+            if (serializable instanceof Scorecard) {
+                for (Object obj : ((Scorecard) serializable).getExtensionsAndCharacteristicsAndMiningSchemas()) {
+                    if (obj instanceof Characteristics) {
+                        Characteristics characteristics = (Characteristics) obj;
                         assertEquals(4, characteristics.getCharacteristics().size());
-                        for (Characteristic characteristic : characteristics.getCharacteristics()){
-                            for (Attribute attribute : characteristic.getAttributes()){
+                        for (Characteristic characteristic : characteristics.getCharacteristics()) {
+                            for (Attribute attribute : characteristic.getAttributes()) {
                                 assertNotNull(attribute.getReasonCode());
                             }
                         }
@@ -93,17 +94,17 @@ public class ScorecardReasonCodeTest {
 
     @Test
     public void testBaselineScores() throws Exception {
-        for (Object serializable : pmmlDocument.getAssociationModelsAndBaselineModelsAndClusteringModels()){
-            if (serializable instanceof Scorecard){
-                for (Object obj :((Scorecard)serializable) .getExtensionsAndCharacteristicsAndMiningSchemas()){
-                    if (obj instanceof Characteristics){
-                        Characteristics characteristics = (Characteristics)obj;
+        for (Object serializable : pmmlDocument.getAssociationModelsAndBaselineModelsAndClusteringModels()) {
+            if (serializable instanceof Scorecard) {
+                for (Object obj : ((Scorecard) serializable).getExtensionsAndCharacteristicsAndMiningSchemas()) {
+                    if (obj instanceof Characteristics) {
+                        Characteristics characteristics = (Characteristics) obj;
                         assertEquals(4, characteristics.getCharacteristics().size());
                         assertEquals(10.0, characteristics.getCharacteristics().get(0).getBaselineScore());
                         assertEquals(99.0, characteristics.getCharacteristics().get(1).getBaselineScore());
                         assertEquals(12.0, characteristics.getCharacteristics().get(2).getBaselineScore());
                         assertEquals(0.0, characteristics.getCharacteristics().get(3).getBaselineScore());
-                        assertEquals(25.0, ((Scorecard)serializable).getBaselineScore());
+                        assertEquals(25.0, ((Scorecard) serializable).getBaselineScore());
                         return;
                     }
                 }
@@ -139,19 +140,19 @@ public class ScorecardReasonCodeTest {
         //System.out.println(drl);
         KnowledgeBuilder kbuilder = KnowledgeBuilderFactory.newKnowledgeBuilder();
 
-        kbuilder.add( ResourceFactory.newByteArrayResource(drl.getBytes()), ResourceType.DRL);
-        for (KnowledgeBuilderError error : kbuilder.getErrors()){
+        kbuilder.add(ResourceFactory.newByteArrayResource(drl.getBytes()), ResourceType.DRL);
+        for (KnowledgeBuilderError error : kbuilder.getErrors()) {
             System.out.println(error.getMessage());
         }
-        assertFalse( kbuilder.hasErrors() );
+        assertFalse(kbuilder.hasErrors());
 
         //BUILD RULEBASE
         KnowledgeBase kbase = KnowledgeBaseFactory.newKnowledgeBase();
-        kbase.addKnowledgePackages( kbuilder.getKnowledgePackages() );
+        kbase.addKnowledgePackages(kbuilder.getKnowledgePackages());
 
         //NEW WORKING MEMORY
         StatefulKnowledgeSession session = kbase.newStatefulKnowledgeSession();
-        FactType scorecardType = kbase.getFactType( "org.drools.scorecards.example","SampleScore" );
+        FactType scorecardType = kbase.getFactType("org.drools.scorecards.example", "SampleScore");
 
         DroolsScorecard scorecard = (DroolsScorecard) scorecardType.newInstance();
         scorecardType.set(scorecard, "age", 10);
@@ -186,11 +187,11 @@ public class ScorecardReasonCodeTest {
         scorecardType.set(scorecard, "occupation", "TEACHER");
         scorecardType.set(scorecard, "residenceState", "AP");
         scorecardType.set(scorecard, "validLicense", true);
-        session.insert( scorecard );
+        session.insert(scorecard);
         session.fireAllRules();
         session.dispose();
         //occupation = +10, age = +40, state = -10, validLicense = 1
-        assertEquals(41.0,scorecard.getCalculatedScore());
+        assertEquals(41.0, scorecard.getCalculatedScore());
         //[OCC02, AGE03, VL001, RS001]
         assertEquals(4, scorecard.getReasonCodes().size());
         assertTrue(scorecard.getReasonCodes().contains("OCC99"));
@@ -203,19 +204,19 @@ public class ScorecardReasonCodeTest {
     public void testDRLExecution() throws Exception {
         KnowledgeBuilder kbuilder = KnowledgeBuilderFactory.newKnowledgeBuilder();
 
-        kbuilder.add( ResourceFactory.newByteArrayResource(drl.getBytes()), ResourceType.DRL);
-        for (KnowledgeBuilderError error : kbuilder.getErrors()){
+        kbuilder.add(ResourceFactory.newByteArrayResource(drl.getBytes()), ResourceType.DRL);
+        for (KnowledgeBuilderError error : kbuilder.getErrors()) {
             System.out.println(error.getMessage());
         }
         assertFalse(kbuilder.hasErrors());
 
         //BUILD RULEBASE
         KnowledgeBase kbase = KnowledgeBaseFactory.newKnowledgeBase();
-        kbase.addKnowledgePackages( kbuilder.getKnowledgePackages() );
+        kbase.addKnowledgePackages(kbuilder.getKnowledgePackages());
 
         //NEW WORKING MEMORY
         StatefulKnowledgeSession session = kbase.newStatefulKnowledgeSession();
-        FactType scorecardType = kbase.getFactType( "org.drools.scorecards.example","SampleScore" );
+        FactType scorecardType = kbase.getFactType("org.drools.scorecards.example", "SampleScore");
 
         DroolsScorecard scorecard = (DroolsScorecard) scorecardType.newInstance();
         scorecardType.set(scorecard, "age", 10);
@@ -251,11 +252,11 @@ public class ScorecardReasonCodeTest {
         scorecardType.set(scorecard, "occupation", "TEACHER");
         scorecardType.set(scorecard, "residenceState", "AP");
         scorecardType.set(scorecard, "validLicense", true);
-        session.insert( scorecard );
+        session.insert(scorecard);
         session.fireAllRules();
         session.dispose();
         //occupation = +10, age = +40, state = -10, validLicense = 1, initialScore = 100;
-        assertEquals(141.0,scorecard.getCalculatedScore());
+        assertEquals(141.0, scorecard.getCalculatedScore());
         //[OCC02, AGE03, VL001, RS001]
         assertEquals(4, scorecard.getReasonCodes().size());
         assertTrue(scorecard.getReasonCodes().contains("OCC02"));
