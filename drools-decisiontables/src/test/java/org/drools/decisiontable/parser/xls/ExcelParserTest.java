@@ -13,7 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.drools.decisiontable.parser.xls;
 
 import static org.junit.Assert.assertEquals;
@@ -36,9 +35,11 @@ import org.junit.Test;
  * covered by integration tests.
  */
 public class ExcelParserTest {
+
     /**
-     * This should test to see if a cell is in a certain range or not. 
-     * If it is in a merged range, then it should return the top left cell.
+     * This should test to see if a cell is in a certain range or not. If it is
+     * in a merged range, then it should return the top left cell.
+     *
      * @throws Exception
      */
     @Test
@@ -54,36 +55,32 @@ public class ExcelParserTest {
         r1.topLeft.column = 2;
         r1.topLeft.contents = "first";
 
-
-
         r1.bottomRight = new MockCell();
         r1.bottomRight.column = 5;
         r1.bottomRight.row = 7;
         r1.bottomRight.contents = "last";
-
 
         MockCell cell = new MockCell();
         cell.contents = "test";
         cell.row = 1;
         cell.column = 1;
 
-        assertNull(parser.getRangeIfMerged( cell, ranges));
+        assertNull(parser.getRangeIfMerged(cell, ranges));
 
         cell = new MockCell();
         cell.contents = "wrong";
         cell.row = 2;
         cell.column = 5;
 
-        assertEquals("first", parser.getRangeIfMerged( cell, ranges).getTopLeft().getContents());
+        assertEquals("first", parser.getRangeIfMerged(cell, ranges).getTopLeft().getContents());
 
     }
-    
+
     static class MockCell<CellFeatures> implements Cell {
 
         int column;
         int row;
         String contents;
-
 
         public CellFormat getCellFormat() {
             return null;
@@ -115,7 +112,7 @@ public class ExcelParserTest {
         }
 
     }
-    
+
     static class MockRange implements Range {
 
         MockCell bottomRight;
